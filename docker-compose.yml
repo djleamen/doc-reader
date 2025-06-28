@@ -1,0 +1,44 @@
+services:
+  rag-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - VECTOR_DB_TYPE=faiss
+      - HOST=0.0.0.0
+      - PORT=8000
+    volumes:
+      - ./documents:/app/documents
+      - ./indexes:/app/indexes
+      - ./logs:/app/logs
+    command: ["python", "-m", "src.api"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  rag-ui:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./documents:/app/documents
+      - ./indexes:/app/indexes
+      - ./logs:/app/logs
+    command: ["streamlit", "run", "src/streamlit_app.py", "--server.address", "0.0.0.0"]
+    depends_on:
+      - rag-api
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  documents:
+  indexes:
+  logs:

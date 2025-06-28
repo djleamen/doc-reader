@@ -1,0 +1,45 @@
+# Core dependencies for RAG system
+langchain==0.2.16
+langchain-community==0.2.16
+langchain-openai==0.1.23
+faiss-cpu==1.8.0
+openai>=1.40.0,<2.0.0
+tiktoken==0.7.0
+
+# Document processing
+pypdf2==3.0.1
+python-docx==1.1.0
+python-pptx==0.6.23
+python-magic==0.4.27
+
+# Text processing and chunking
+nltk==3.8.1
+sentence-transformers==2.7.0
+
+# Vector database alternatives (optional - choose one)
+# chromadb==0.5.0
+# pinecone-client==4.1.1
+
+# Web framework and API
+fastapi==0.111.0
+uvicorn==0.30.0
+streamlit==1.36.0
+
+# Data handling
+pandas==2.2.2
+numpy==1.26.4
+tqdm==4.66.4
+
+# Configuration and logging
+python-dotenv==1.0.1
+pydantic==2.7.4
+pydantic-settings==2.3.4
+loguru==0.7.2
+
+# Testing
+pytest==8.2.2
+pytest-asyncio==0.23.7
+
+# Additional dependencies
+requests==2.32.3
+Pillow==10.3.0
