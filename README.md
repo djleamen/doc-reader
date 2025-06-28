@@ -25,7 +25,7 @@ A specialized large document (800k+ words) Q&A AI agent using Retrieval-Augmente
 
 1. **Clone the repository**:
 ```bash
-git clone <repository-url>
+git clone https://github.com/djleamen/doc-reader
 cd doc-reader
 ```
 
