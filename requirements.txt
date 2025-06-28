@@ -1,6 +1,6 @@
 # Core dependencies for RAG system
 langchain==0.2.16
-langchain-community==0.2.16
+langchain-community==0.2.19
 langchain-openai==0.1.23
 faiss-cpu==1.8.0
 openai>=1.40.0,<2.0.0
