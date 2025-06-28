@@ -23,7 +23,7 @@ sentence-transformers==2.7.0
 # Web framework and API
 fastapi==0.111.0
 uvicorn==0.30.0
-streamlit==1.36.0
+streamlit==1.37.0
 
 # Data handling
 pandas==2.2.2
