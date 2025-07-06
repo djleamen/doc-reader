@@ -19,6 +19,22 @@ class TestDocumentProcessor:
         self.processor = DocumentProcessor()
         self.temp_dir = Path(tempfile.mkdtemp())
     
+    def test_pypdf_migration_fix(self):
+        """Test that pypdf is used instead of PyPDF2 to fix infinite loop vulnerability."""
+        # This test verifies the fix for the infinite loop issue when comments aren't followed by characters
+        import sys
+        import src.document_processor as doc_proc
+        
+        # Verify that the document processor uses pypdf
+        assert hasattr(doc_proc, 'pypdf'), "DocumentProcessor should import pypdf"
+        
+        # Verify that PyPDF2 is not being used 
+        import inspect
+        source_code = inspect.getsource(doc_proc)
+        assert 'import pypdf' in source_code, "DocumentProcessor should import pypdf"
+        assert 'import PyPDF2' not in source_code, "DocumentProcessor should not import PyPDF2"
+        assert 'pypdf.PdfReader' in source_code, "DocumentProcessor should use pypdf.PdfReader"
+    
     def teardown_method(self):
         """Clean up test fixtures."""
         if self.temp_dir.exists():
