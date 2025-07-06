@@ -431,7 +431,3 @@ CHAT_MODEL=gpt-4-turbo-preview
 - Create an issue on GitHub
 - Check the documentation
 - Review the test cases for usage examples
-
----
-
-**Built with ❤️ for efficient large document processing**
