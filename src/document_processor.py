@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 from pathlib import Path
 from loguru import logger
 
-import PyPDF2
+import pypdf
 from docx import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document as LangChainDocument
@@ -59,7 +59,7 @@ class DocumentProcessor:
         text = ""
         try:
             with open(file_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+                pdf_reader = pypdf.PdfReader(file)
                 for page_num, page in enumerate(pdf_reader.pages):
                     try:
                         page_text = page.extract_text()
