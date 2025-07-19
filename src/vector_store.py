@@ -220,7 +220,12 @@ class DocumentIndex:
     """High-level document indexing and search interface."""
 
     def __init__(self, index_name: str = "default"):
+        import re
         from os.path import normpath, realpath
+        
+        # Validate index_name with a regex pattern
+        if not re.match(r'^[a-zA-Z0-9_-]+$', index_name):
+            raise ValueError(f"Invalid index name: {index_name}. Only alphanumeric characters, dashes, and underscores are allowed.")
         
         self.index_name = index_name
         self.vector_store = VectorStoreFactory.create_vector_store()
