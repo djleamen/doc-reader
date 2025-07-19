@@ -12,7 +12,7 @@ def run_command(command, description):
     """Run a shell command and handle errors."""
     print(f"🔧 {description}...")
     try:
-        result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
+        subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ Error: {e}")
@@ -34,36 +34,34 @@ def check_python_version():
 def setup_environment():
     """Set up the development environment."""
     print("🚀 Setting up RAG Document Q&A System...")
-    
+
     # Check Python version
     if not check_python_version():
         return False
-    
+
     # Create virtual environment if it doesn't exist
     if not Path("venv").exists():
         if not run_command("python -m venv venv", "Creating virtual environment"):
             return False
     else:
         print("✅ Virtual environment already exists")
-    
+
     # Determine activation command based on OS
     if os.name == 'nt':  # Windows
-        activate_cmd = "venv\\Scripts\\activate"
         pip_cmd = "venv\\Scripts\\pip"
     else:  # Unix/Linux/macOS
-        activate_cmd = "source venv/bin/activate"
         pip_cmd = "venv/bin/pip"
-    
+
     # Install requirements
     if not run_command(f"{pip_cmd} install -r requirements.txt", "Installing dependencies"):
         return False
-    
+
     # Create necessary directories
-    directories = ["documents", "indexes", "logs", "temp", "backups"]
+    directories = ["documents", "indexes", "logs", "temp", "backups", "media", "staticfiles"]
     for directory in directories:
         Path(directory).mkdir(exist_ok=True)
     print("✅ Created necessary directories")
-    
+
     # Copy .env.example to .env if it doesn't exist
     env_file = Path(".env")
     if not env_file.exists():
@@ -75,16 +73,13 @@ def setup_environment():
             return False
     else:
         print("✅ .env file already exists")
-    
+
     print("\n🎉 Setup completed successfully!")
-    print("\nNext steps:")
+    print("\n📖 Quick start guide:")
     print("1. Edit .env file with your OpenAI API key")
-    print("2. Run './start.sh' to start the system")
-    print("3. Or run individual components:")
-    print("   - API: python -m src.api")
-    print("   - CLI: python -m src.cli --help")
-    print("   - Web UI: streamlit run src/streamlit_app.py")
-    
+    print("2. Run: python main.py start")
+    print("3. Open: http://localhost:8000")
+
     return True
 
 
@@ -96,8 +91,8 @@ def main():
     except KeyboardInterrupt:
         print("\n❌ Setup interrupted by user")
         sys.exit(1)
-    except Exception as e:
-        print(f"❌ Unexpected error: {e}")
+    except Exception as unexpected_error:
+        print(f"❌ Unexpected error: {unexpected_error}")
         sys.exit(1)
 
 

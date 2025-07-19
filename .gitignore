@@ -48,6 +48,28 @@ temp/
 backups/
 *.log
 
+# RAG specific directories
+vector_stores/
+embeddings/
+models/
+uploads/
+
+# Database files
+*.sqlite3
+*.db
+*.sqlite
+
+# Django specific
+staticfiles/
+collected_static/
+.static/
+node_modules/
+migrations/__pycache__/
+
+# Django sessions and cache
+django_cache/
+django_sessions/
+
 # OS
 .DS_Store
 .DS_Store?
@@ -71,12 +93,26 @@ docs/_build/
 
 # Local configuration
 config.local.py
+.pylintrc
 
 # Model files (if storing locally)
 *.pkl
 *.joblib
 *.h5
 *.pb
+
+# Vector database files
+*.faiss
+*.index
+*.vectors
+chroma.sqlite3
+chroma_db/
+
+# API keys and secrets (additional)
+.openai_key
+.pinecone_key
+secrets.json
+config.local.json
 
 # Large files
 *.zip
@@ -86,3 +122,15 @@ config.local.py
 # Temporary files
 *.tmp
 *.temp
+
+# Development and debugging
+.streamlit/
+debug.log
+error.log
+access.log
+celery-*.pid
+dump.rdb
+
+# Docker development
+docker-compose.override.yml
+.dockerignore.local

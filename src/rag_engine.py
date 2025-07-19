@@ -26,12 +26,12 @@ class QueryResult:
 
 class RAGEngine:
     """Main RAG engine for document Q&A."""
-    
+
     def __init__(self, index_name: str = "default"):
         self.index_name = index_name
         self.document_index = DocumentIndex(index_name)
         self.document_processor = DocumentProcessor()
-        
+
         # Initialize LLM
         self.llm = ChatOpenAI(
             api_key=settings.openai_api_key,
@@ -39,16 +39,16 @@ class RAGEngine:
             temperature=settings.temperature,
             max_tokens=settings.max_tokens
         )
-        
+
         # Create prompt template
         self.prompt_template = self._create_prompt_template()
-        
+
         logger.info(f"RAG Engine initialized with index: {index_name}")
-    
+
     def _create_prompt_template(self) -> PromptTemplate:
         """Create the prompt template for Q&A."""
-        template = """You are a helpful AI assistant that answers questions based on the provided document context. 
-Use only the information from the context to answer questions. If the context doesn't contain enough information 
+        template = """You are a helpful AI assistant that answers questions based on the provided document context.
+Use only the information from the context to answer questions. If the context doesn't contain enough information
 to answer the question, say so clearly.
 
 Context from documents:
@@ -64,16 +64,16 @@ Instructions:
 5. If there are multiple relevant pieces of information, synthesize them
 
 Answer:"""
-        
+
         return PromptTemplate(
             template=template,
             input_variables=["context", "question"]
         )
-    
+
     def add_documents(self, file_paths: List[str], metadata: Dict[str, Any] = None) -> None:
         """Add documents to the RAG system."""
         all_documents = []
-        
+
         for file_path in file_paths:
             try:
                 logger.info(f"Processing document: {file_path}")
@@ -83,25 +83,25 @@ Answer:"""
             except Exception as e:
                 logger.error(f"Error processing {file_path}: {e}")
                 continue
-        
+
         if all_documents:
             self.document_index.add_documents(all_documents)
             logger.info(f"Successfully added {len(all_documents)} total document chunks")
         else:
             logger.warning("No documents were successfully processed")
-    
+
     def query(
-        self, 
-        question: str, 
+        self,
+        question: str,
         k: int = None,
         include_sources: bool = True,
         include_scores: bool = True
     ) -> QueryResult:
         """Query the RAG system with a question."""
         logger.info(f"Processing query: {question}")
-        
+
         k = k or settings.top_k_results
-        
+
         # Retrieve relevant documents
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
             doc_score_pairs = self.document_index.search_with_scores(question, k)
@@ -110,7 +110,7 @@ Answer:"""
         else:
             source_documents = self.document_index.search(question, k)
             confidence_scores = [1.0] * len(source_documents)
-        
+
         if not source_documents:
             logger.warning("No relevant documents found for query")
             return QueryResult(
@@ -120,20 +120,20 @@ Answer:"""
                 confidence_scores=[],
                 metadata={"retrieval_count": 0}
             )
-        
+
         # Prepare context
         context = self._prepare_context(source_documents)
-        
+
         # Generate answer
         prompt = self.prompt_template.format(context=context, question=question)
-        
+
         try:
             answer = self.llm.predict(prompt)
             logger.info("Successfully generated answer")
         except Exception as e:
             logger.error(f"Error generating answer: {e}")
             answer = "I encountered an error while generating the answer. Please try again."
-        
+
         # Prepare metadata
         metadata = {
             "retrieval_count": len(source_documents),
@@ -141,7 +141,7 @@ Answer:"""
             "prompt_length": len(prompt),
             "model_used": settings.chat_model
         }
-        
+
         result = QueryResult(
             query=question,
             answer=answer,
@@ -149,28 +149,28 @@ Answer:"""
             confidence_scores=confidence_scores if include_scores else [],
             metadata=metadata
         )
-        
+
         return result
-    
+
     def _prepare_context(self, documents: List[Document]) -> str:
         """Prepare context string from retrieved documents."""
         context_parts = []
-        
+
         for i, doc in enumerate(documents, 1):
             # Extract source info
             source = doc.metadata.get('source', 'Unknown')
             chunk_id = doc.metadata.get('chunk_id', i)
-            
+
             # Format document chunk
             context_part = f"Document {i} (Source: {source}, Chunk: {chunk_id}):\n{doc.page_content}\n"
             context_parts.append(context_part)
-        
+
         return "\n".join(context_parts)
-    
+
     def batch_query(self, questions: List[str], **kwargs) -> List[QueryResult]:
         """Process multiple queries in batch."""
         results = []
-        
+
         for question in questions:
             try:
                 result = self.query(question, **kwargs)
@@ -186,9 +186,9 @@ Answer:"""
                     metadata={"error": str(e)}
                 )
                 results.append(error_result)
-        
+
         return results
-    
+
     def get_index_stats(self) -> Dict[str, Any]:
         """Get statistics about the document index."""
         # This would need to be implemented based on the vector store
@@ -200,7 +200,7 @@ Answer:"""
             "chunk_size": settings.chunk_size,
             "chunk_overlap": settings.chunk_overlap
         }
-    
+
     def clear_index(self) -> None:
         """Clear the document index."""
         self.document_index = DocumentIndex(self.index_name)
@@ -209,12 +209,12 @@ Answer:"""
 
 class ConversationalRAG(RAGEngine):
     """Extended RAG engine with conversation memory."""
-    
+
     def __init__(self, index_name: str = "default"):
         super().__init__(index_name)
         self.conversation_history: List[Dict[str, str]] = []
         self.max_history_length = 10
-    
+
     def conversational_query(self, question: str, **kwargs) -> QueryResult:
         """Query with conversation context."""
         # Add conversation context to the question if history exists
@@ -222,39 +222,39 @@ class ConversationalRAG(RAGEngine):
             context_question = self._add_conversation_context(question)
         else:
             context_question = question
-        
+
         # Get the answer
         result = self.query(context_question, **kwargs)
-        
+
         # Update conversation history
         self.conversation_history.append({
             "question": question,
             "answer": result.answer
         })
-        
+
         # Trim history if too long
         if len(self.conversation_history) > self.max_history_length:
             self.conversation_history = self.conversation_history[-self.max_history_length:]
-        
+
         return result
-    
+
     def _add_conversation_context(self, question: str) -> str:
         """Add conversation history to the current question."""
         if not self.conversation_history:
             return question
-        
+
         context_parts = ["Previous conversation context:"]
-        
+
         # Add last few exchanges
         recent_history = self.conversation_history[-3:]  # Last 3 exchanges
         for i, exchange in enumerate(recent_history, 1):
             context_parts.append(f"Q{i}: {exchange['question']}")
             context_parts.append(f"A{i}: {exchange['answer'][:200]}...")  # Truncate long answers
-        
+
         context_parts.append(f"\nCurrent question: {question}")
-        
+
         return "\n".join(context_parts)
-    
+
     def clear_conversation(self) -> None:
         """Clear conversation history."""
         self.conversation_history = []

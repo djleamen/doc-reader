@@ -21,7 +21,7 @@ def setup_logging():
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
         level="INFO"
     )
-    
+
     # Also log to file
     log_file = Path(settings.logs_dir) / "rag_cli.log"
     log_file.parent.mkdir(exist_ok=True)
@@ -31,9 +31,9 @@ def setup_logging():
 def add_documents_command(args):
     """Add documents to the RAG system."""
     logger.info(f"Adding documents to index: {args.index_name}")
-    
+
     rag_engine = RAGEngine(args.index_name)
-    
+
     # Check if files exist
     valid_files = []
     for file_path in args.files:
@@ -41,11 +41,11 @@ def add_documents_command(args):
             valid_files.append(file_path)
         else:
             logger.warning(f"File not found: {file_path}")
-    
+
     if not valid_files:
         logger.error("No valid files to process")
         return
-    
+
     try:
         rag_engine.add_documents(valid_files)
         logger.success(f"Successfully added {len(valid_files)} documents to index")
@@ -57,12 +57,12 @@ def add_documents_command(args):
 def query_command(args):
     """Query the RAG system."""
     logger.info(f"Querying index: {args.index_name}")
-    
+
     if args.conversational:
         rag_engine = ConversationalRAG(args.index_name)
     else:
         rag_engine = RAGEngine(args.index_name)
-    
+
     try:
         if args.conversational:
             result = rag_engine.conversational_query(
@@ -78,7 +78,7 @@ def query_command(args):
                 include_sources=args.include_sources,
                 include_scores=args.include_scores
             )
-        
+
         # Print results
         print("\n" + "="*80)
         print("QUESTION:")
@@ -86,7 +86,7 @@ def query_command(args):
         print("\n" + "-"*80)
         print("ANSWER:")
         print(result.answer)
-        
+
         if args.include_sources and result.source_documents:
             print("\n" + "-"*80)
             print("SOURCE DOCUMENTS:")
@@ -94,18 +94,18 @@ def query_command(args):
                 score_text = ""
                 if args.include_scores and i <= len(result.confidence_scores):
                     score_text = f" (Score: {result.confidence_scores[i-1]:.4f})"
-                
+
                 print(f"\nSource {i}{score_text}:")
                 print(f"File: {doc.metadata.get('filename', 'Unknown')}")
                 print(f"Chunk: {doc.metadata.get('chunk_id', 'Unknown')}")
                 print("Content:")
                 print(doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content)
-        
+
         print("\n" + "-"*80)
         print("METADATA:")
         print(json.dumps(result.metadata, indent=2))
         print("="*80)
-        
+
     except Exception as e:
         logger.error(f"Error querying documents: {e}")
         sys.exit(1)
@@ -114,36 +114,36 @@ def query_command(args):
 def interactive_mode(args):
     """Interactive Q&A mode."""
     logger.info(f"Starting interactive mode with index: {args.index_name}")
-    
+
     if args.conversational:
         rag_engine = ConversationalRAG(args.index_name)
         print("🤖 Conversational RAG Mode - Your questions will be remembered!")
     else:
         rag_engine = RAGEngine(args.index_name)
         print("🤖 RAG Q&A Mode - Ask questions about your documents!")
-    
+
     print("Type 'quit', 'exit', or 'bye' to exit.")
     print("Type 'clear' to clear conversation history (conversational mode only).")
     print("-" * 60)
-    
+
     while True:
         try:
             question = input("\n❓ Your question: ").strip()
-            
+
             if question.lower() in ['quit', 'exit', 'bye']:
                 print("👋 Goodbye!")
                 break
-            
+
             if question.lower() == 'clear' and args.conversational:
                 rag_engine.clear_conversation()
                 print("💭 Conversation history cleared!")
                 continue
-            
+
             if not question:
                 continue
-            
+
             print("🔍 Searching for answer...")
-            
+
             if args.conversational:
                 result = rag_engine.conversational_query(
                     question=question,
@@ -158,12 +158,12 @@ def interactive_mode(args):
                     include_sources=False,
                     include_scores=False
                 )
-            
+
             print(f"\n💬 Answer: {result.answer}")
-            
+
             if args.verbose:
                 print(f"\n📊 Retrieved {result.metadata.get('retrieval_count', 0)} relevant documents")
-            
+
         except KeyboardInterrupt:
             print("\n👋 Goodbye!")
             break
@@ -174,13 +174,13 @@ def interactive_mode(args):
 def list_indexes_command(args):
     """List available indexes."""
     index_dir = Path(settings.index_dir)
-    
+
     if not index_dir.exists():
         logger.info("No indexes directory found")
         return
-    
+
     indexes = [d.name for d in index_dir.iterdir() if d.is_dir()]
-    
+
     if indexes:
         print("Available indexes:")
         for index in indexes:
@@ -193,7 +193,7 @@ def stats_command(args):
     """Show index statistics."""
     rag_engine = RAGEngine(args.index_name)
     stats = rag_engine.get_index_stats()
-    
+
     print(f"Index Statistics for: {args.index_name}")
     print("-" * 40)
     print(json.dumps(stats, indent=2))
@@ -212,18 +212,18 @@ def clear_index_command(args):
 def main():
     """Main CLI entry point."""
     setup_logging()
-    
+
     parser = argparse.ArgumentParser(description="RAG Document Q&A System CLI")
     parser.add_argument("--index-name", default="default", help="Name of the document index")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
-    
+
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
+
     # Add documents command
     add_parser = subparsers.add_parser("add", help="Add documents to the index")
     add_parser.add_argument("files", nargs="+", help="Paths to documents to add")
     add_parser.set_defaults(func=add_documents_command)
-    
+
     # Query command
     query_parser = subparsers.add_parser("query", help="Query the document index")
     query_parser.add_argument("question", help="Question to ask")
@@ -232,32 +232,32 @@ def main():
     query_parser.add_argument("--include-scores", action="store_true", default=True, help="Include similarity scores")
     query_parser.add_argument("--conversational", action="store_true", help="Use conversational mode")
     query_parser.set_defaults(func=query_command)
-    
+
     # Interactive mode
     interactive_parser = subparsers.add_parser("interactive", help="Start interactive Q&A mode")
     interactive_parser.add_argument("--top-k", type=int, default=5, help="Number of top results to retrieve")
     interactive_parser.add_argument("--conversational", action="store_true", help="Use conversational mode")
     interactive_parser.set_defaults(func=interactive_mode)
-    
+
     # List indexes
     list_parser = subparsers.add_parser("list", help="List available indexes")
     list_parser.set_defaults(func=list_indexes_command)
-    
+
     # Show stats
     stats_parser = subparsers.add_parser("stats", help="Show index statistics")
     stats_parser.set_defaults(func=stats_command)
-    
+
     # Clear index
     clear_parser = subparsers.add_parser("clear", help="Clear an index")
     clear_parser.add_argument("--confirm", action="store_true", help="Skip confirmation prompt")
     clear_parser.set_defaults(func=clear_index_command)
-    
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         return
-    
+
     try:
         args.func(args)
     except Exception as e:

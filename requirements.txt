@@ -20,10 +20,12 @@ sentence-transformers==2.7.0
 # chromadb==0.5.0
 # pinecone-client==4.1.1
 
-# Web framework and API
-fastapi==0.111.0
-uvicorn==0.30.0
-streamlit==1.37.0
+# Django web framework and API
+django==5.0.0
+djangorestframework==3.15.0
+django-cors-headers==4.5.0
+
+# Note: FastAPI and Streamlit removed - using Django instead
 
 # Data handling
 pandas==2.2.2

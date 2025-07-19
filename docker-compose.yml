@@ -1,44 +1,44 @@
 services:
-  rag-api:
+  rag-django:
     build: .
     ports:
       - "8000:8000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PINECONE_API_KEY=${PINECONE_API_KEY}
+      - PINECONE_ENVIRONMENT=${PINECONE_ENVIRONMENT}
       - VECTOR_DB_TYPE=faiss
-      - HOST=0.0.0.0
-      - PORT=8000
+      - DJANGO_SETTINGS_MODULE=django_app.settings
+      - DEBUG=False
     volumes:
       - ./documents:/app/documents
       - ./indexes:/app/indexes
       - ./logs:/app/logs
-    command: ["python", "-m", "src.api"]
+      - ./media:/app/media
+      - ./staticfiles:/app/staticfiles
+    command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
       interval: 30s
       timeout: 10s
       retries: 3
+    depends_on:
+      - rag-migrate
 
-  rag-ui:
+  rag-migrate:
     build: .
-    ports:
-      - "8501:8501"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DJANGO_SETTINGS_MODULE=django_app.settings
     volumes:
       - ./documents:/app/documents
       - ./indexes:/app/indexes
       - ./logs:/app/logs
-    command: ["streamlit", "run", "src/streamlit_app.py", "--server.address", "0.0.0.0"]
-    depends_on:
-      - rag-api
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8501/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    command: ["python", "manage.py", "migrate"]
 
 volumes:
   documents:
   indexes:
   logs:
+  media:
+  staticfiles:

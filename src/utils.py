@@ -20,12 +20,12 @@ def get_file_hash(file_path: str) -> str:
 def get_file_info(file_path: str) -> Dict[str, Any]:
     """Get comprehensive file information."""
     path = Path(file_path)
-    
+
     if not path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
-    
+
     stat = path.stat()
-    
+
     return {
         "name": path.name,
         "size": stat.st_size,
@@ -42,13 +42,13 @@ def format_file_size(size_bytes: int) -> str:
     """Format file size in human readable format."""
     if size_bytes == 0:
         return "0 B"
-    
+
     size_names = ["B", "KB", "MB", "GB", "TB"]
     i = 0
     while size_bytes >= 1024 and i < len(size_names) - 1:
         size_bytes /= 1024.0
         i += 1
-    
+
     return f"{size_bytes:.1f} {size_names[i]}"
 
 
@@ -62,26 +62,26 @@ def clean_text(text: str) -> str:
     """Clean and normalize text content."""
     if not text:
         return ""
-    
+
     # Remove excessive whitespace
     text = ' '.join(text.split())
-    
+
     # Remove control characters but keep newlines and tabs
     cleaned = ''.join(char for char in text if ord(char) >= 32 or char in '\n\t')
-    
+
     return cleaned.strip()
 
 
 def split_text_by_sentences(text: str, max_chunk_size: int = 1000) -> List[str]:
     """Split text into chunks by sentences, respecting max size."""
     import re
-    
+
     # Simple sentence splitting (can be improved with spaCy for better accuracy)
     sentences = re.split(r'(?<=[.!?])\s+', text)
-    
+
     chunks = []
     current_chunk = ""
-    
+
     for sentence in sentences:
         if len(current_chunk) + len(sentence) <= max_chunk_size:
             current_chunk += sentence + " "
@@ -89,10 +89,10 @@ def split_text_by_sentences(text: str, max_chunk_size: int = 1000) -> List[str]:
             if current_chunk:
                 chunks.append(current_chunk.strip())
             current_chunk = sentence + " "
-    
+
     if current_chunk:
         chunks.append(current_chunk.strip())
-    
+
     return chunks
 
 
@@ -100,10 +100,10 @@ def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
     """Extract keywords from text using simple frequency analysis."""
     import re
     from collections import Counter
-    
+
     # Simple keyword extraction (can be improved with NLP libraries)
     words = re.findall(r'\b[a-zA-Z]{3,}\b', text.lower())
-    
+
     # Filter out common stop words
     stop_words = {
         'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
@@ -114,13 +114,13 @@ def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
         'must', 'can', 'shall', 'a', 'an', 'as', 'if', 'or', 'because', 'while',
         'when', 'where', 'how', 'what', 'which', 'who', 'whom', 'whose', 'why'
     }
-    
+
     filtered_words = [word for word in words if word not in stop_words and len(word) > 3]
-    
+
     # Get most common words
     word_freq = Counter(filtered_words)
     keywords = [word for word, count in word_freq.most_common(max_keywords)]
-    
+
     return keywords
 
 
@@ -139,7 +139,7 @@ def time_function(func):
 def create_directory_structure():
     """Create necessary directory structure for the application."""
     from src.config import settings
-    
+
     directories = [
         settings.documents_dir,
         settings.index_dir,
@@ -147,7 +147,7 @@ def create_directory_structure():
         "temp",
         "backups"
     ]
-    
+
     for directory in directories:
         Path(directory).mkdir(parents=True, exist_ok=True)
 
@@ -157,21 +157,21 @@ def backup_index(index_name: str, backup_dir: str = "backups") -> str:
     from src.config import settings
     import shutil
     import datetime
-    
+
     source_path = Path(settings.index_dir) / index_name
-    
+
     if not source_path.exists():
         raise FileNotFoundError(f"Index not found: {index_name}")
-    
+
     backup_dir = Path(backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
-    
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_name = f"{index_name}_backup_{timestamp}"
     backup_path = backup_dir / backup_name
-    
+
     shutil.copytree(source_path, backup_path)
-    
+
     return str(backup_path)
 
 
@@ -179,16 +179,16 @@ def restore_index(backup_path: str, index_name: str) -> None:
     """Restore an index from backup."""
     from src.config import settings
     import shutil
-    
+
     source_path = Path(backup_path)
     target_path = Path(settings.index_dir) / index_name
-    
+
     if not source_path.exists():
         raise FileNotFoundError(f"Backup not found: {backup_path}")
-    
+
     if target_path.exists():
         shutil.rmtree(target_path)
-    
+
     shutil.copytree(source_path, target_path)
 
 
@@ -196,12 +196,12 @@ def get_system_info() -> Dict[str, Any]:
     """Get system information for debugging."""
     import platform
     import psutil
-    
+
     try:
         cpu_count = psutil.cpu_count()
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
-        
+
         return {
             "platform": platform.platform(),
             "python_version": platform.python_version(),
@@ -237,50 +237,50 @@ def chunk_list(lst: List, chunk_size: int) -> List[List]:
 def merge_metadata(base_metadata: Dict[str, Any], additional_metadata: Dict[str, Any]) -> Dict[str, Any]:
     """Merge metadata dictionaries with conflict resolution."""
     merged = base_metadata.copy()
-    
+
     for key, value in additional_metadata.items():
         if key in merged:
             # Handle conflicts by prefixing with 'additional_'
             merged[f"additional_{key}"] = value
         else:
             merged[key] = value
-    
+
     return merged
 
 
 class ProgressTracker:
     """Simple progress tracker for long-running operations."""
-    
+
     def __init__(self, total: int, description: str = "Processing"):
         self.total = total
         self.current = 0
         self.description = description
         self.start_time = time.time()
-    
+
     def update(self, increment: int = 1):
         """Update progress."""
         self.current += increment
         self._print_progress()
-    
+
     def _print_progress(self):
         """Print progress bar."""
         if self.total == 0:
             return
-        
+
         percent = (self.current / self.total) * 100
         elapsed = time.time() - self.start_time
-        
+
         if self.current > 0:
             eta = (elapsed / self.current) * (self.total - self.current)
             eta_str = f"ETA: {eta:.1f}s"
         else:
             eta_str = "ETA: --"
-        
+
         bar_length = 30
         filled_length = int(bar_length * self.current / self.total)
         bar = '█' * filled_length + '-' * (bar_length - filled_length)
-        
+
         print(f'\r{self.description}: |{bar}| {percent:.1f}% ({self.current}/{self.total}) {eta_str}', end='')
-        
+
         if self.current >= self.total:
             print()  # New line when complete

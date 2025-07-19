@@ -22,7 +22,13 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY . .
 
 # Create necessary directories
-RUN mkdir -p documents indexes logs temp backups
+RUN mkdir -p documents indexes logs temp backups media staticfiles
+
+# Set Django settings module
+ENV DJANGO_SETTINGS_MODULE=django_app.settings
+
+# Collect static files for Django
+RUN python manage.py collectstatic --noinput || true
 
 # Create non-root user for security
 RUN useradd -m -u 1000 raguser && \
@@ -32,11 +38,11 @@ RUN useradd -m -u 1000 raguser && \
 USER raguser
 
 # Expose ports
-EXPOSE 8000 8501
+EXPOSE 8000 8001 8501
 
-# Health check
+# Health check for Django
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/api/health/ || exit 1
 
-# Default command
-CMD ["python", "-m", "src.api"]
+# Default command - Django server
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

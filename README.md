@@ -6,6 +6,18 @@
 
 A specialized large document (800k+ words) Q&A AI agent using Retrieval-Augmented Generation (RAG). This system can efficiently process, index, and query massive documents to provide accurate, contextual answers.
 
+## 🆕 Django Migration
+
+**This project has been converted to Django for better data management and scalability!** 
+
+- ✅ **New**: Django web interface with Bootstrap UI
+- ✅ **New**: Database persistence with Django ORM
+- ✅ **New**: Admin interface for data management
+- ✅ **New**: User session tracking for conversational mode
+- ✅ **Preserved**: All existing RAG functionality
+
+See [`DJANGO_MIGRATION.md`](DJANGO_MIGRATION.md) for detailed migration guide.
+
 ## 🚀 Features
 
 - **Large Document Support**: Handle documents up to 800k+ words efficiently
@@ -13,8 +25,8 @@ A specialized large document (800k+ words) Q&A AI agent using Retrieval-Augmente
 - **Advanced RAG Pipeline**: Combines retrieval and generation for accurate answers
 - **Vector Database Options**: FAISS, ChromaDB, and Pinecone support
 - **Conversational Mode**: Maintains context across multiple queries
-- **Web Interface**: Beautiful Streamlit UI for easy interaction
-- **REST API**: FastAPI-based API for integration
+- **Modern Web Interface**: Beautiful Django UI with Bootstrap styling
+- **REST API**: Django REST Framework API for integration
 - **CLI Tool**: Command-line interface for batch processing
 - **Scalable Architecture**: Modular design for easy extension
 
@@ -78,38 +90,66 @@ MAX_TOKENS=4000
 
 ## 🎯 Quick Start
 
-### 1. Web Interface (Recommended)
+### 1. Unified Entry Point (Recommended)
 
-Start the API server:
+The easiest way to start:
 ```bash
-python -m src.api
+# Quick start with automatic setup
+python main.py start
+
+# Or using the shell script
+./start.sh
 ```
 
-In another terminal, start the Streamlit app:
+This will:
+- Set up the environment if needed
+- Run Django migrations
+- Start the web server at http://localhost:8000
+
+### 2. Manual Steps (Alternative)
+
+If you prefer step-by-step control:
+
 ```bash
-streamlit run src/streamlit_app.py
+# First-time setup only
+python main.py setup
+
+# Start Django server
+python main.py django
 ```
 
-Open your browser to `http://localhost:8501`
+Open your browser to `http://localhost:8000`
 
-### 2. Command Line Interface
+### 3. Available Commands
+
+All available commands through the unified entry point:
+
+```bash
+python main.py start                  # Quick start (recommended)
+python main.py django                 # Start Django only  
+python main.py cli add doc.pdf        # Add documents via CLI
+python main.py cli query "question"   # Query via CLI
+python main.py setup                  # First-time setup only
+```
+
+### 4. Command Line Interface
 
 **Add documents to the index**:
 ```bash
-python -m src.cli add path/to/document1.pdf path/to/document2.docx
+python main.py cli add path/to/document1.pdf path/to/document2.docx
 ```
 
 **Query the documents**:
 ```bash
-python -m src.cli query "What are the main findings in the research?"
+python main.py cli query "What are the main findings in the research?"
 ```
 
 **Interactive mode**:
 ```bash
-python -m src.cli interactive --conversational
+python main.py cli interactive --conversational
 ```
 
-### 3. Python API
+### 5. Python API
 
 ```python
 from src.rag_engine import RAGEngine
@@ -226,8 +266,8 @@ python -m src.cli query \
 - **Document Processor**: Extracts and chunks text from various formats
 - **Vector Store Manager**: Handles embedding storage and similarity search  
 - **RAG Engine**: Orchestrates retrieval and generation
-- **API Layer**: FastAPI for REST endpoints
-- **UI Layer**: Streamlit for web interface
+- **API Layer**: Django REST Framework for API endpoints
+- **UI Layer**: Django with Bootstrap for web interface
 - **CLI**: Command-line tools for batch operations
 
 ## 🔧 Advanced Configuration
