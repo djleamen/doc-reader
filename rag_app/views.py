@@ -322,13 +322,19 @@ class ConversationalQueryView(APIView):
                 })
 
             except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error("Conversational query failed", exc_info=True)
                 return Response({
-                    'error': f'Conversational query failed: {str(e)}'
+                    'error': 'An internal server error occurred during the conversational query.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error("Request processing failed", exc_info=True)
             return Response({
-                'error': f'Request failed: {str(e)}'
+                'error': 'An internal server error occurred while processing the request.'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
