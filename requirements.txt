@@ -22,7 +22,7 @@ sentence-transformers==2.7.0
 
 # Django web framework and API
 django==5.0.0
-djangorestframework==3.15.2
+djangorestframework==3.16.0
 django-cors-headers==4.5.0
 
 # Note: FastAPI and Streamlit removed - using Django instead
