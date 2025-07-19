@@ -374,8 +374,11 @@ def index_stats(request):
         return Response(stats)
 
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to get stats", exc_info=True)
         return Response({
-            'error': f'Failed to get stats: {str(e)}'
+            'error': 'An internal server error occurred while retrieving stats.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
