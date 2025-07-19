@@ -398,8 +398,11 @@ def clear_conversation(request):
         return Response({'message': 'Conversation cleared successfully'})
 
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error("Failed to clear conversation", exc_info=True)
         return Response({
-            'error': f'Failed to clear conversation: {str(e)}'
+            'error': 'An internal server error occurred.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
