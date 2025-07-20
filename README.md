@@ -4,7 +4,7 @@
 [![Dependencies](https://img.shields.io/badge/dependencies-up%20to%20date-brightgreen)](https://github.com/djleamen/doc-reader/blob/main/requirements.txt)
 [![Last Commit](https://img.shields.io/github/last-commit/djleamen/doc-reader)](https://github.com/djleamen/doc-reader/commits)
 
-A specialized large document (800k+ words) Q&A AI agent using Retrieval-Augmented Generation (RAG). This system can efficiently process, index, and query massive documents to provide accurate, contextual answers.
+A specialized large document Q&A AI agent using Retrieval-Augmented Generation (RAG). This system can efficiently process, index, and query massive documents to provide accurate, contextual answers.
 
 ## 🆕 Django Migration
 
