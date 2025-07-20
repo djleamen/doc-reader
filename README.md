@@ -10,13 +10,11 @@ A specialized large document Q&A AI agent using Retrieval-Augmented Generation (
 
 **This project has been converted to Django for better data management and scalability!** 
 
-- ✅ **New**: Django web interface with Bootstrap UI
-- ✅ **New**: Database persistence with Django ORM
-- ✅ **New**: Admin interface for data management
-- ✅ **New**: User session tracking for conversational mode
-- ✅ **Preserved**: All existing RAG functionality
-
-See [`DJANGO_MIGRATION.md`](DJANGO_MIGRATION.md) for detailed migration guide.
+- **New**: Django web interface with Bootstrap UI
+- **New**: Database persistence with Django ORM
+- **New**: Admin interface for data management
+- **New**: User session tracking for conversational mode
+- **Preserved**: All existing RAG functionality
 
 ## 🚀 Features
 
