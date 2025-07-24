@@ -9,7 +9,7 @@ services:
       - PINECONE_ENVIRONMENT=${PINECONE_ENVIRONMENT}
       - VECTOR_DB_TYPE=faiss
       - DJANGO_SETTINGS_MODULE=django_app.settings
-      - DEBUG=False
+      - DEBUG=True
     volumes:
       - ./documents:/app/documents
       - ./indexes:/app/indexes

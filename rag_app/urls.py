@@ -18,6 +18,7 @@ api_urlpatterns = [
 # Web URLs
 web_urlpatterns = [
     path('', views.HomeView.as_view(), name='home'),
+    path('test/', views.TestView.as_view(), name='test'),
 ]
 
 # Combined URL patterns

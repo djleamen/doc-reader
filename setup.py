@@ -41,7 +41,7 @@ def setup_environment():
 
     # Create virtual environment if it doesn't exist
     if not Path("venv").exists():
-        if not run_command("python -m venv venv", "Creating virtual environment"):
+        if not run_command(f"{sys.executable} -m venv venv", "Creating virtual environment"):
             return False
     else:
         print("✅ Virtual environment already exists")

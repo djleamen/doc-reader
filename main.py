@@ -84,11 +84,25 @@ Examples:
 def run_setup():
     """Run the setup script."""
     print("⚙️ Running first-time setup...")
-    result = subprocess.run([sys.executable, "setup.py"], capture_output=True, text=True, check=True)
-    if result.returncode != 0:
-        print(f"❌ Setup failed: {result.stderr}")
+    try:
+        # First try without capturing output to see what happens
+        result = subprocess.run([sys.executable, "setup.py"], check=True)
+        print("✅ Setup completed successfully!")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Setup failed with exit code {e.returncode}")
+        # Try again with captured output to get error details
+        try:
+            result = subprocess.run([sys.executable, "setup.py"], capture_output=True, text=True)
+            if result.stdout:
+                print(f"Output: {result.stdout}")
+            if result.stderr:
+                print(f"Error: {result.stderr}")
+        except Exception:
+            pass
         sys.exit(1)
-    print("✅ Setup completed successfully!")
+    except Exception as e:
+        print(f"❌ Setup failed with unexpected error: {e}")
+        sys.exit(1)
 
 
 def start_django(host="127.0.0.1", port=8000, with_setup=False):

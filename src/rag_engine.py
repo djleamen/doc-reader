@@ -70,7 +70,7 @@ Answer:"""
             input_variables=["context", "question"]
         )
 
-    def add_documents(self, file_paths: List[str], metadata: Dict[str, Any] = None) -> None:
+    def add_documents(self, file_paths: List[str], metadata: Dict[str, Any] = None) -> int:
         """Add documents to the RAG system."""
         all_documents = []
 
@@ -87,8 +87,10 @@ Answer:"""
         if all_documents:
             self.document_index.add_documents(all_documents)
             logger.info(f"Successfully added {len(all_documents)} total document chunks")
+            return len(all_documents)
         else:
             logger.warning("No documents were successfully processed")
+            return 0
 
     def query(
         self,

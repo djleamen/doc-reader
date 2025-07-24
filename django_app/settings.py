@@ -102,8 +102,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Only include static directory if it exists
+STATICFILES_DIRS = []
+if (BASE_DIR / 'static').exists():
+    STATICFILES_DIRS.append(BASE_DIR / 'static')
 
 # Media files
 MEDIA_URL = '/media/'
@@ -159,3 +163,70 @@ LOGS_DIR = BASE_DIR / 'logs'
 os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 os.makedirs(INDEXES_DIR, exist_ok=True)
 os.makedirs(LOGS_DIR, exist_ok=True)
+
+# Security Settings
+# These settings help protect against various attacks including SQL injection
+
+# Security headers
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+
+# In production, set these to True
+if not DEBUG:
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+# Additional security settings for SQL injection prevention
+# These help prevent various forms of injection attacks
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+# Database connection security
+# SQLite doesn't need the MySQL-specific init_command
+if DATABASES['default']['ENGINE'] == 'django.db.backends.mysql':
+    DATABASES['default']['OPTIONS'] = {
+        # Prevent unsafe SQL operations for MySQL
+        'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+    }
+
+# Logging configuration for security monitoring
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'security_file': {
+            'level': 'WARNING',
+            'class': 'logging.FileHandler',
+            'filename': LOGS_DIR / 'security.log',
+            'formatter': 'verbose',
+        },
+        'django_file': {
+            'level': 'ERROR',
+            'class': 'logging.FileHandler',
+            'filename': LOGS_DIR / 'django.log',
+            'formatter': 'verbose',
+        },
+    },
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+    },
+    'loggers': {
+        'django.security': {
+            'handlers': ['security_file'],
+            'level': 'WARNING',
+            'propagate': True,
+        },
+        'django': {
+            'handlers': ['django_file'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+    },
+}

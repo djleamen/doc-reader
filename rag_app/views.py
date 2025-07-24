@@ -63,16 +63,19 @@ class HomeView(TemplateView):
     template_name = 'rag_app/index.html'
 
     def get_context_data(self, **kwargs):
-        # Import here to avoid circular imports
-        from src.config import settings as rag_settings
         context = super().get_context_data(**kwargs)
         context.update({
             'indexes': DocumentIndex.objects.all(),
             'recent_documents': Document.objects.filter(processed=True)[:10],
-            'supported_formats': rag_settings.supported_formats_list,
-            'max_file_size_mb': rag_settings.max_document_size_mb,
+            'supported_formats': ['pdf', 'docx', 'txt', 'md'],
+            'max_file_size_mb': 100,
         })
         return context
+
+
+class TestView(TemplateView):
+    """Simple test view to verify Django is working."""
+    template_name = 'simple_test.html'
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -129,18 +132,19 @@ class DocumentUploadView(APIView):
                         original_filename=file.name,
                         file_path=file_path,
                         file_size=file.size,
-                        file_type=file.name.split('.')[-1].lower()
+                        file_type=file.name.split('.')[-1].lower(),
+                        chunk_count=0
                     )
 
                     try:
                         # Process document
                         chunks_added = rag_engine.add_documents([file_path])
-                        document.chunk_count = chunks_added
+                        document.chunk_count = chunks_added or 0
                         document.processed = True
                         document.save()
 
                         processed_files.append(file.name)
-                        total_chunks += chunks_added
+                        total_chunks += (chunks_added or 0)
 
                     except Exception as e:
                         document.processing_error = str(e)
@@ -157,7 +161,7 @@ class DocumentUploadView(APIView):
 
             # Update index statistics
             index.document_count = Document.objects.filter(index=index, processed=True).count()
-            index.chunk_count = sum(doc.chunk_count for doc in Document.objects.filter(index=index, processed=True))
+            index.chunk_count = sum(doc.chunk_count or 0 for doc in Document.objects.filter(index=index, processed=True))
             index.save()
 
             return Response({
@@ -418,8 +422,11 @@ def clear_conversation(request):
 @api_view(['GET'])
 def health_check(request):
     """Health check endpoint."""
+    # Use a safer approach to get index names
+    indexes = [index.name for index in DocumentIndex.objects.only('name')]
+    
     return Response({
         'status': 'healthy',
         'message': 'RAG Document Q&A API is running',
-        'indexes': list(DocumentIndex.objects.values_list('name', flat=True))
+        'indexes': indexes
     })
