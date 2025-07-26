@@ -21,7 +21,6 @@ web_urlpatterns = [
     path('test/', views.TestView.as_view(), name='test'),
 ]
 
-# Combined URL patterns
-urlpatterns = [
-    path('api/', include(api_urlpatterns)),
-] + web_urlpatterns
+# Combined URL patterns - API patterns are included directly since 
+# main urls.py already routes them under /api/
+urlpatterns = api_urlpatterns + web_urlpatterns

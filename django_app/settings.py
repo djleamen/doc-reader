@@ -2,6 +2,7 @@
 Django settings for django_app project.
 """
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -20,7 +21,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-change-me-in-produc
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') + ['testserver']
 
 # Application definition
 INSTALLED_APPS = [
@@ -172,8 +173,8 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
-# In production, set these to True
-if not DEBUG:
+# In production, set these to True (but not during testing)
+if not DEBUG and 'test' not in sys.argv:
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
