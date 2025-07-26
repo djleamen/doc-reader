@@ -13,8 +13,6 @@ class Migration(migrations.Migration):
         # SQLite doesn't support ALTER COLUMN with DEFAULT, so we need to recreate the table
         migrations.RunSQL(
             """
-            BEGIN;
-            
             -- Create new table with proper defaults
             CREATE TABLE "rag_app_document_new" (
                 "id" char(32) NOT NULL PRIMARY KEY,
@@ -29,25 +27,38 @@ class Migration(migrations.Migration):
                 "processing_error" text NOT NULL DEFAULT '',
                 "index_id" char(32) NOT NULL REFERENCES "rag_app_documentindex" ("id") DEFERRABLE INITIALLY DEFERRED
             );
-            
+            """,
+            reverse_sql="DROP TABLE IF EXISTS rag_app_document_new;"
+        ),
+        migrations.RunSQL(
+            """
             -- Copy existing data
             INSERT INTO "rag_app_document_new" 
             SELECT "id", "filename", "original_filename", "file_path", "file_size", "file_type", 
                    "uploaded_at", "processed", COALESCE("chunk_count", 0), 
                    COALESCE("processing_error", ''), "index_id"
             FROM "rag_app_document";
-            
+            """,
+            reverse_sql="DELETE FROM rag_app_document_new;"
+        ),
+        migrations.RunSQL(
+            """
             -- Drop old table and rename new one
             DROP TABLE "rag_app_document";
+            """,
+            reverse_sql="-- Cannot reverse this operation"
+        ),
+        migrations.RunSQL(
+            """
             ALTER TABLE "rag_app_document_new" RENAME TO "rag_app_document";
-            
+            """,
+            reverse_sql="ALTER TABLE rag_app_document RENAME TO rag_app_document_new;"
+        ),
+        migrations.RunSQL(
+            """
             -- Recreate index
             CREATE INDEX "rag_app_document_index_id_73393bba" ON "rag_app_document" ("index_id");
-            
-            COMMIT;
             """,
-            reverse_sql="""
-            -- This is a one-way migration, reversal would be complex
-            """
+            reverse_sql="DROP INDEX IF EXISTS rag_app_document_index_id_73393bba;"
         ),
     ]
