@@ -1,0 +1,8 @@
+frontend:
+  - 'templates/**'
+  - 'templates/rag_app/**'
+backend:
+  - 'src/**'
+  - 'rag_app/**'
+  - 'rag_app/migrations/**'
+  - 'django_app/**'
