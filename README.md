@@ -1,471 +1,173 @@
 # RAG Document Q&A System
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
-[![Dependencies](https://img.shields.io/badge/dependencies-up%20to%20date-brightgreen)](https://github.com/djleamen/doc-reader/blob/main/requirements.txt)
-[![Last Commit](https://img.shields.io/github/last-commit/djleamen/doc-reader)](https://github.com/djleamen/doc-reader/commits)
+[![Django](https://img.shields.io/badge/django-5.0%2B-green)](https://www.djangoproject.com/)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-A specialized large document Q&A AI agent using Retrieval-Augmented Generation (RAG). This system can efficiently process, index, and query massive documents to provide accurate, contextual answers.
+A Django-based document Q&A system using Retrieval-Augmented Generation (RAG) to process and query large documents with AI-powered responses.
 
-## 🆕 Django Migration
+## ✨ Features
 
-**This project has been converted to Django for better data management and scalability!** 
+- **Django Web Interface**: Modern Bootstrap UI with admin panel
+- **Large Document Support**: Handle documents up to 800k+ words
+- **Multiple Formats**: PDF, DOCX, TXT, and Markdown support
+- **REST API**: Django REST Framework for integrations
+- **Vector Search**: FAISS/ChromaDB/Pinecone vector databases
+- **Conversational Mode**: Context-aware multi-turn conversations
+- **Session Management**: User session tracking and conversation history
+- **CLI Tools**: Command-line interface for batch operations
 
-- **New**: Django web interface with Bootstrap UI
-- **New**: Database persistence with Django ORM
-- **New**: Admin interface for data management
-- **New**: User session tracking for conversational mode
-- **Preserved**: All existing RAG functionality
+## 🚀 Quick Start
 
-## 🚀 Features
-
-- **Large Document Support**: Handle documents up to 800k+ words efficiently
-- **Multiple Format Support**: PDF, DOCX, TXT, and Markdown files
-- **Advanced RAG Pipeline**: Combines retrieval and generation for accurate answers
-- **Vector Database Options**: FAISS, ChromaDB, and Pinecone support
-- **Conversational Mode**: Maintains context across multiple queries
-- **Modern Web Interface**: Beautiful Django UI with Bootstrap styling
-- **REST API**: Django REST Framework API for integration
-- **CLI Tool**: Command-line interface for batch processing
-- **Scalable Architecture**: Modular design for easy extension
-
-## 📋 Requirements
-
+### Requirements
 - Python 3.8+
 - OpenAI API key
-- 8GB+ RAM recommended for large documents
-- 2GB+ disk space for vector indexes
-
-## 🛠️ Installation
+### Installation
 
 1. **Clone the repository**:
+
 ```bash
 git clone https://github.com/djleamen/doc-reader
 cd doc-reader
 ```
 
 2. **Create virtual environment**:
+
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 3. **Install dependencies**:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 4. **Set up environment variables**:
+
 ```bash
 cp .env.example .env
-# Edit .env with your API keys and configurations
+# Edit .env with your OpenAI API key
 ```
 
-5. **Create necessary directories**:
+5. **Run setup and start server**:
+
 ```bash
-mkdir -p documents indexes logs
-```
-
-## ⚙️ Configuration
-
-Edit the `.env` file with your settings:
-
-```env
-# Required
-OPENAI_API_KEY=your_openai_api_key_here
-
-# Optional - Vector Database
-VECTOR_DB_TYPE=faiss  # Options: faiss, chroma, pinecone
-CHUNK_SIZE=1000
-CHUNK_OVERLAP=200
-TOP_K_RESULTS=5
-
-# Model Settings
-EMBEDDING_MODEL=text-embedding-ada-002
-CHAT_MODEL=gpt-4-turbo-preview
-TEMPERATURE=0.1
-MAX_TOKENS=4000
-```
-
-## 🎯 Quick Start
-
-### 1. Unified Entry Point (Recommended)
-
-The easiest way to start:
-```bash
-# Quick start with automatic setup
 python main.py start
-
-# Or using the shell script
-./start.sh
-```
-
-This will:
-- Set up the environment if needed
-- Run Django migrations
-- Start the web server at http://localhost:8000
-
-### 2. Manual Steps (Alternative)
-
-If you prefer step-by-step control:
-
-```bash
-# First-time setup only
-python main.py setup
-
-# Start Django server
-python main.py django
 ```
 
 Open your browser to `http://localhost:8000`
 
-### 3. Available Commands
+## 📖 Usage
 
-All available commands through the unified entry point:
+### Web Interface
+- Upload documents via the web UI
+- Ask questions in natural language
+- View sources and confidence scores
+- Use conversational mode for follow-up questions
 
+### REST API
 ```bash
-python main.py start                  # Quick start (recommended)
-python main.py django                 # Start Django only  
-python main.py cli add doc.pdf        # Add documents via CLI
-python main.py cli query "question"   # Query via CLI
-python main.py setup                  # First-time setup only
+# Upload documents
+curl -X POST "http://localhost:8000/api/upload-documents/" \
+  -F "files=@document.pdf" \
+  -F "index_name=default"
+
+# Query documents
+curl -X POST "http://localhost:8000/api/query/" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is the main topic?", "index_name": "default"}'
 ```
 
-### 4. Command Line Interface
-
-**Add documents to the index**:
+### Command Line
 ```bash
-python main.py cli add path/to/document1.pdf path/to/document2.docx
-```
+# Add documents
+python main.py cli add document.pdf
 
-**Query the documents**:
-```bash
-python main.py cli query "What are the main findings in the research?"
-```
+# Query documents
+python main.py cli query "What are the key findings?"
 
-**Interactive mode**:
-```bash
+# Interactive mode
 python main.py cli interactive --conversational
 ```
 
-### 5. Python API
+## ⚙️ Configuration
 
-```python
-from src.rag_engine import RAGEngine
+Key environment variables in `.env`:
 
-# Initialize the RAG engine
-rag = RAGEngine(index_name="my_documents")
+```env
+# Required
+OPENAI_API_KEY=your_api_key_here
 
-# Add documents
-rag.add_documents([
-    "path/to/large_document.pdf",
-    "path/to/research_paper.docx"
-])
-
-# Query the documents
-result = rag.query("What are the key conclusions?")
-print(result.answer)
-
-# Access source documents
-for doc in result.source_documents:
-    print(f"Source: {doc.metadata['filename']}")
-    print(f"Content: {doc.page_content[:200]}...")
-```
-
-## 📚 Usage Examples
-
-### Processing Large Academic Papers
-
-```python
-from src.rag_engine import RAGEngine
-
-# Create specialized index for academic papers
-rag = RAGEngine(index_name="academic_papers")
-
-# Add multiple research papers
-papers = [
-    "papers/machine_learning_survey_2024.pdf",
-    "papers/deep_learning_advances.pdf", 
-    "papers/nlp_transformers_review.pdf"
-]
-
-rag.add_documents(papers)
-
-# Ask research questions
-questions = [
-    "What are the latest advances in transformer models?",
-    "How do different ML approaches compare in performance?",
-    "What are the main challenges in current NLP research?"
-]
-
-for question in questions:
-    result = rag.query(question)
-    print(f"Q: {question}")
-    print(f"A: {result.answer}\n")
-```
-
-### Legal Document Analysis
-
-```python
-from src.rag_engine import ConversationalRAG
-
-# Use conversational mode for complex legal queries
-legal_rag = ConversationalRAG(index_name="legal_docs")
-
-# Add legal documents
-legal_rag.add_documents([
-    "contracts/service_agreement_800k_words.pdf",
-    "regulations/compliance_manual.docx"
-])
-
-# Interactive legal consultation
-result1 = legal_rag.conversational_query(
-    "What are the termination clauses in the service agreement?"
-)
-
-result2 = legal_rag.conversational_query(
-    "How do these clauses relate to the compliance requirements?"
-)
-```
-
-### Technical Documentation Q&A
-
-```bash
-# CLI example for technical docs
-python -m src.cli add \
-    manuals/software_manual_v2.pdf \
-    docs/api_documentation.md \
-    guides/troubleshooting_guide.docx
-
-# Query with high precision
-python -m src.cli query \
-    "How do I configure the authentication module?" \
-    --top-k 3 \
-    --include-sources \
-    --include-scores
+# Optional
+VECTOR_DB_TYPE=faiss              # faiss, chroma, or pinecone
+CHUNK_SIZE=1000                   # Text chunk size
+CHUNK_OVERLAP=200                 # Overlap between chunks
+TOP_K_RESULTS=5                   # Number of results to retrieve
+CHAT_MODEL=gpt-4-turbo-preview    # OpenAI model to use
 ```
 
 ## 🏗️ Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Document      │    │   Vector Store   │    │   LLM Engine    │
-│   Processor     │───▶│   (FAISS/Chroma) │───▶│   (GPT-4)       │
+│   Django App    │    │   Vector Store   │    │   OpenAI API    │
+│   (Web/API)     │───▶│   (FAISS/etc.)   │───▶│   (GPT-4)       │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Text Chunks   │    │   Embeddings     │    │   Contextual    │
-│   + Metadata    │    │   + Similarity   │    │   Answers       │
+│   Document      │    │   Embeddings     │    │   AI Responses  │
+│   Processing    │    │   & Search       │    │   with Sources  │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
-### Key Components
-
-- **Document Processor**: Extracts and chunks text from various formats
-- **Vector Store Manager**: Handles embedding storage and similarity search  
+### Components
+- **Django App**: Web interface, API, and data management
+- **Document Processor**: Extracts and chunks text from files
+- **Vector Store**: Handles embeddings and similarity search
 - **RAG Engine**: Orchestrates retrieval and generation
-- **API Layer**: Django REST Framework for API endpoints
-- **UI Layer**: Django with Bootstrap for web interface
-- **CLI**: Command-line tools for batch operations
+- **CLI Tools**: Command-line utilities
 
-## 🔧 Advanced Configuration
+## � Docker Deployment
 
-### Custom Chunking Strategy
+```bash
+# Quick start with Docker
+docker-compose up
 
-```python
-from src.document_processor import DocumentProcessor
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-
-# Create custom text splitter for code documents
-code_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1500,
-    chunk_overlap=300,
-    separators=["\nclass ", "\ndef ", "\n\n", "\n", " "],
-    length_function=len
-)
-
-processor = DocumentProcessor()
-processor.text_splitter = code_splitter
-```
-
-### Multiple Vector Stores
-
-```python
-# Use different vector stores for different document types
-academic_rag = RAGEngine(index_name="academic")  # Uses FAISS
-legal_rag = RAGEngine(index_name="legal")        # Uses ChromaDB
-
-# Configure in .env:
-# VECTOR_DB_TYPE=faiss  # or chroma, pinecone
-```
-
-### Custom Prompts
-
-```python
-from langchain.prompts import PromptTemplate
-
-custom_prompt = PromptTemplate(
-    template="""You are a legal expert assistant. Use the provided context to answer legal questions accurately.
-
-Context: {context}
-
-Question: {question}
-
-Please provide a detailed legal analysis with relevant citations from the context.
-
-Answer:""",
-    input_variables=["context", "question"]
-)
-
-rag.prompt_template = custom_prompt
-```
-
-## 📊 Performance Optimization
-
-### For Large Documents (800k+ words)
-
-1. **Increase chunk overlap** for better context:
-```env
-CHUNK_SIZE=1500
-CHUNK_OVERLAP=300
-```
-
-2. **Use hierarchical chunking**:
-```python
-# Process in sections first, then chunks
-processor.hierarchical_chunking = True
-```
-
-3. **Optimize vector search**:
-```env
-TOP_K_RESULTS=10  # Retrieve more candidates
-```
-
-4. **Use efficient vector store**:
-```env
-VECTOR_DB_TYPE=faiss  # Fastest for large datasets
-```
-
-### Memory Management
-
-```python
-# Process documents in batches
-from src.utils import chunk_list
-
-large_doc_list = ["doc1.pdf", "doc2.pdf", ...]
-for batch in chunk_list(large_doc_list, batch_size=5):
-    rag.add_documents(batch)
+# Or build manually
+docker build -t rag-system .
+docker run -p 8000:8000 rag-system
 ```
 
 ## 🧪 Testing
 
-Run the test suite:
 ```bash
-# Run all tests
-pytest tests/
+# Run tests
+pytest
 
-# Run specific test categories
-pytest tests/ -k "test_document_processor"
-pytest tests/ -k "test_rag_engine"
-
-# Run with coverage
-pytest tests/ --cov=src --cov-report=html
+# Test with coverage
+pytest --cov=src --cov=rag_app
 ```
 
-## 📖 API Documentation
+## 📄 License
 
-Start the API server and visit:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-### Key Endpoints
-
-- `POST /upload-documents`: Upload and process documents
-- `POST /query`: Query the document index
-- `POST /conversational-query`: Query with conversation context
-- `GET /index-stats`: Get index statistics
-- `DELETE /index`: Clear the index
-
-## 🚀 Deployment
-
-### Docker Deployment
-
-```dockerfile
-FROM python:3.9-slim
-
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-
-COPY . .
-
-EXPOSE 8000
-CMD ["python", "-m", "src.api"]
-```
-
-### Production Considerations
-
-1. **Use production vector database** (Pinecone, Weaviate)
-2. **Implement rate limiting** and authentication
-3. **Scale with load balancer** for high traffic
-4. **Monitor API performance** and costs
-5. **Backup vector indexes** regularly
+MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+3. Add tests for new functionality
+4. Submit a pull request
 
 ## 🆘 Troubleshooting
 
-### Common Issues
+**Import errors**: Ensure all dependencies are installed with `pip install -r requirements.txt`
 
-**Q: "Import errors when running the application"**
-```bash
-# Install missing dependencies
-pip install -r requirements.txt
+**Memory issues with large docs**: Reduce `CHUNK_SIZE` in `.env` or process documents individually
 
-# Check Python version
-python --version  # Should be 3.8+
-```
+**Port conflicts**: Use `python main.py start --port 8001` to use a different port
 
-**Q: "Out of memory when processing large documents"**
-```python
-# Reduce chunk size and batch processing
-CHUNK_SIZE=500
-# Process documents one at a time
-```
-
-**Q: "API server not starting"**
-```bash
-# Check if port is available
-lsof -i :8000
-
-# Use different port
-python -m src.api --port 8001
-```
-
-**Q: "Poor answer quality"**
-```python
-# Increase context retrieval
-TOP_K_RESULTS=10
-
-# Adjust chunk overlap
-CHUNK_OVERLAP=400
-
-# Try different models
-CHAT_MODEL=gpt-4-turbo-preview
-```
-
-## 📞 Support
-
-- Create an issue on GitHub
-- Check the documentation
-- Review the test cases for usage examples
+**Poor answer quality**: Increase `TOP_K_RESULTS` and `CHUNK_OVERLAP` for better context retrieval
