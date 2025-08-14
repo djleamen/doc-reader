@@ -12,6 +12,7 @@ from loguru import logger
 from src.config import settings
 from src.vector_store import DocumentIndex
 from src.document_processor import DocumentProcessor
+from src.semantic_coherence import SemanticCoherenceValidator, CoherenceMetrics, FallbackAction
 
 
 @dataclass
@@ -22,15 +23,26 @@ class QueryResult:
     source_documents: List[Document]
     confidence_scores: List[float]
     metadata: Dict[str, Any]
+    coherence_metrics: Optional[CoherenceMetrics] = None
+    fallback_action: Optional[FallbackAction] = None
 
 
 class RAGEngine:
     """Main RAG engine for document Q&A."""
 
-    def __init__(self, index_name: str = "default"):
+    def __init__(self, index_name: str = "default", enable_coherence_validation: bool = True):
         self.index_name = index_name
         self.document_index = DocumentIndex(index_name)
         self.document_processor = DocumentProcessor()
+        
+        # Initialize semantic coherence validator
+        self.enable_coherence_validation = enable_coherence_validation
+        if enable_coherence_validation:
+            self.coherence_validator = SemanticCoherenceValidator()
+            logger.info("Semantic coherence validation enabled")
+        else:
+            self.coherence_validator = None
+            logger.info("Semantic coherence validation disabled")
 
         # Initialize LLM
         self.llm = ChatOpenAI(
@@ -62,6 +74,7 @@ Instructions:
 3. If the context is insufficient, state this clearly
 4. Provide a comprehensive answer when possible
 5. If there are multiple relevant pieces of information, synthesize them
+6. Respond in paragraph format, avoid using markdown
 
 Answer:"""
 
@@ -97,12 +110,14 @@ Answer:"""
         question: str,
         k: int = None,
         include_sources: bool = True,
-        include_scores: bool = True
+        include_scores: bool = True,
+        enable_coherence_fallback: bool = True
     ) -> QueryResult:
         """Query the RAG system with a question."""
         logger.info(f"Processing query: {question}")
 
         k = k or settings.top_k_results
+        original_k = k
 
         # Retrieve relevant documents
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
@@ -136,20 +151,98 @@ Answer:"""
             logger.error(f"Error generating answer: {e}")
             answer = "I encountered an error while generating the answer. Please try again."
 
+        # Validate semantic coherence and apply fallbacks if enabled
+        coherence_metrics = None
+        fallback_action = None
+        final_answer = answer
+        
+        if self.enable_coherence_validation and self.coherence_validator and enable_coherence_fallback:
+            try:
+                coherence_metrics, fallback_action = self.coherence_validator.validate_coherence(
+                    query=question,
+                    retrieved_chunks=source_documents,
+                    generated_answer=answer,
+                    chunk_scores=confidence_scores
+                )
+                
+                # Apply fallback behaviors
+                if fallback_action.needs_fallback or coherence_metrics.needs_fallback:
+                    logger.info(f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
+                    
+                    # 1. Boost k if needed and re-retrieve
+                    if fallback_action.boost_k and fallback_action.new_k_value and fallback_action.new_k_value > original_k:
+                        logger.info(f"Boosting k from {original_k} to {fallback_action.new_k_value}")
+                        
+                        # Re-retrieve with boosted k
+                        if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
+                            boosted_doc_score_pairs = self.document_index.search_with_scores(question, fallback_action.new_k_value)
+                            boosted_source_documents = [doc for doc, score in boosted_doc_score_pairs]
+                            boosted_confidence_scores = [float(score) for doc, score in boosted_doc_score_pairs]
+                        else:
+                            boosted_source_documents = self.document_index.search(question, fallback_action.new_k_value)
+                            boosted_confidence_scores = [1.0] * len(boosted_source_documents)
+                        
+                        # Re-generate with expanded context if we got more documents
+                        if len(boosted_source_documents) > len(source_documents):
+                            boosted_context = self._prepare_context(boosted_source_documents)
+                            boosted_prompt = self.prompt_template.format(context=boosted_context, question=question)
+                            
+                            try:
+                                boosted_answer = self.llm.predict(boosted_prompt)
+                                logger.info("Successfully regenerated answer with boosted retrieval")
+                                
+                                # Update variables for final result
+                                source_documents = boosted_source_documents
+                                confidence_scores = boosted_confidence_scores
+                                context = boosted_context
+                                answer = boosted_answer
+                                
+                            except Exception as e:
+                                logger.error(f"Error regenerating answer with boosted k: {e}")
+                                # Keep original answer
+                    
+                    # 2. Apply hedging to output
+                    if fallback_action.hedge_output:
+                        final_answer = self.coherence_validator.get_hedged_response(answer, coherence_metrics)
+                        logger.debug("Applied hedging to response")
+                    
+                    # 3. Add uncertainty warning if flagged
+                    if fallback_action.flag_uncertainty and fallback_action.uncertainty_message:
+                        final_answer = fallback_action.uncertainty_message + "\n\n" + final_answer
+                        logger.debug("Added uncertainty flag to response")
+                
+            except Exception as e:
+                logger.error(f"Error during coherence validation: {e}")
+                # Continue with original answer if coherence validation fails
+
         # Prepare metadata
         metadata = {
             "retrieval_count": len(source_documents),
             "context_length": len(context),
             "prompt_length": len(prompt),
-            "model_used": settings.chat_model
+            "model_used": settings.chat_model,
+            "original_k": original_k,
+            "final_k": len(source_documents),
+            "coherence_validation_enabled": self.enable_coherence_validation
         }
+        
+        if coherence_metrics:
+            metadata.update({
+                "coherence_level": coherence_metrics.coherence_level.value,
+                "coherence_delta": coherence_metrics.coherence_delta,
+                "query_chunk_cosine": coherence_metrics.query_chunk_cosine,
+                "chunk_generation_cosine": coherence_metrics.chunk_generation_cosine,
+                "query_generation_cosine": coherence_metrics.query_generation_cosine
+            })
 
         result = QueryResult(
             query=question,
-            answer=answer,
+            answer=final_answer,
             source_documents=source_documents if include_sources else [],
             confidence_scores=confidence_scores if include_scores else [],
-            metadata=metadata
+            metadata=metadata,
+            coherence_metrics=coherence_metrics,
+            fallback_action=fallback_action
         )
 
         return result
@@ -212,8 +305,8 @@ Answer:"""
 class ConversationalRAG(RAGEngine):
     """Extended RAG engine with conversation memory."""
 
-    def __init__(self, index_name: str = "default"):
-        super().__init__(index_name)
+    def __init__(self, index_name: str = "default", enable_coherence_validation: bool = True):
+        super().__init__(index_name, enable_coherence_validation)
         self.conversation_history: List[Dict[str, str]] = []
         self.max_history_length = 10
 

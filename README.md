@@ -16,6 +16,11 @@ A Django-based document Q&A system using Retrieval-Augmented Generation (RAG) to
 - **Conversational Mode**: Context-aware multi-turn conversations
 - **Session Management**: User session tracking and conversation history
 - **CLI Tools**: Command-line interface for batch operations
+- **🎯 Semantic Coherence Validation**: Post-retrieval tracking with automatic fallback behaviors
+  - Monitors semantic consistency across query→chunk→generation pipeline
+  - Automatic k-boosting when coherence drops
+  - Smart output hedging for uncertain answers
+  - Configurable coherence thresholds and fallback strategies
 
 ## 🚀 Quick Start
 
@@ -106,7 +111,23 @@ CHUNK_SIZE=1000                   # Text chunk size
 CHUNK_OVERLAP=200                 # Overlap between chunks
 TOP_K_RESULTS=5                   # Number of results to retrieve
 CHAT_MODEL=gpt-4-turbo-preview    # OpenAI model to use
+
+# Semantic Coherence Settings
+ENABLE_COHERENCE_VALIDATION=True  # Enable semantic coherence tracking
+COHERENCE_HIGH_THRESHOLD=0.8      # High coherence threshold
+COHERENCE_LOW_THRESHOLD=0.4       # Low coherence threshold
+BOOST_K_MULTIPLIER=2.0            # K boosting multiplier
 ```
+
+## 🎯 Semantic Coherence Validation
+
+The system includes advanced semantic coherence tracking that monitors the consistency between queries, retrieved chunks, and generated answers. When coherence drops, automatic fallback behaviors are triggered:
+
+- **K-Boosting**: Automatically increases retrieval count for better context
+- **Output Hedging**: Adds uncertainty language when confidence is low  
+- **Uncertainty Flagging**: Warns users about potentially unreliable answers
+
+See [SEMANTIC_COHERENCE.md](SEMANTIC_COHERENCE.md) for detailed documentation.
 
 ## 🏗️ Architecture
 

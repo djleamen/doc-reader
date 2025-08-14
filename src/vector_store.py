@@ -14,9 +14,28 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.schema import Document
 from langchain_core.vectorstores import VectorStore
+from langchain.embeddings.base import Embeddings
+from sentence_transformers import SentenceTransformer
 from loguru import logger
 
 from src.config import settings
+
+
+class LocalEmbeddings(Embeddings):
+    """Local embeddings using sentence-transformers."""
+    
+    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+        self.model = SentenceTransformer(model_name)
+    
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed a list of documents."""
+        embeddings = self.model.encode(texts)
+        return embeddings.tolist()
+    
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a single query."""
+        embedding = self.model.encode([text])
+        return embedding[0].tolist()
 
 
 class VectorStoreManager(ABC):
@@ -47,10 +66,19 @@ class FAISSVectorStore(VectorStoreManager):
     """FAISS-based vector store implementation."""
 
     def __init__(self):
-        self.embeddings = OpenAIEmbeddings(
-            openai_api_key=settings.openai_api_key,
-            model=settings.embedding_model
-        )
+        # Choose embeddings based on configuration
+        use_local = os.getenv("USE_LOCAL_EMBEDDINGS", "false").lower() == "true"
+        
+        if use_local or not settings.openai_api_key:
+            logger.info("Using local embeddings (sentence-transformers)")
+            self.embeddings = LocalEmbeddings("all-MiniLM-L6-v2")
+        else:
+            logger.info("Using OpenAI embeddings")
+            self.embeddings = OpenAIEmbeddings(
+                openai_api_key=settings.openai_api_key,
+                model=settings.embedding_model
+            )
+        
         self.vector_store: Optional[FAISS] = None
         self.documents: List[Document] = []
 
