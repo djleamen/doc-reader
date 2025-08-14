@@ -151,7 +151,7 @@ See [SEMANTIC_COHERENCE.md](SEMANTIC_COHERENCE.md) for detailed documentation.
 - **RAG Engine**: Orchestrates retrieval and generation
 - **CLI Tools**: Command-line utilities
 
-## � Docker Deployment
+## 🐋 Docker Deployment
 
 ```bash
 # Quick start with Docker
