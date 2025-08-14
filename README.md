@@ -127,8 +127,6 @@ The system includes advanced semantic coherence tracking that monitors the consi
 - **Output Hedging**: Adds uncertainty language when confidence is low  
 - **Uncertainty Flagging**: Warns users about potentially unreliable answers
 
-See [SEMANTIC_COHERENCE.md](SEMANTIC_COHERENCE.md) for detailed documentation.
-
 ## 🏗️ Architecture
 
 ```
