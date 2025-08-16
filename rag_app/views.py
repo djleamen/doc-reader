@@ -1,41 +1,29 @@
 """
 Views for the RAG Document Q&A system.
 """
-import os
-import sys
+
 import json
+import sys
 import time
-from typing import Dict, Any, List
+import logging
 from pathlib import Path
 
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_http_methods
-from django.utils.decorators import method_decorator
-from django.views.generic import TemplateView
-from django.contrib import messages
-from django.conf import settings
-from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-
+from django.core.files.storage import default_storage
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import DocumentIndex, Document, QuerySession, Query
-from .serializers import QueryRequestSerializer, DocumentUploadSerializer
+from src.rag_engine import ConversationalRAG, RAGEngine
+from src.config import settings as rag_settings
 
-# Lazy import to avoid Django startup issues
-def get_rag_modules():
-    """Lazy import of RAG modules."""
-    import sys
-    sys.path.append(str(Path(__file__).parent.parent / 'src'))
-    from src.rag_engine import RAGEngine, ConversationalRAG
-    from src.document_processor import DocumentProcessor
-    return RAGEngine, ConversationalRAG, DocumentProcessor
+from .models import Document, DocumentIndex, Query, QuerySession
 
+sys.path.append(str(Path(__file__).parent.parent / 'src'))
 
 # Global RAG engine instances (similar to FastAPI implementation)
 _rag_engines = {}
@@ -43,23 +31,22 @@ _conversational_rags = {}
 
 
 def get_rag_engine(index_name: str = "default"):
-    """Get or create RAG engine instance for given index."""
-    RAGEngine, _, _ = get_rag_modules()
+    '''Get or create RAG engine instance for given index.'''
     if index_name not in _rag_engines:
         _rag_engines[index_name] = RAGEngine(index_name=index_name)
     return _rag_engines[index_name]
 
 
 def get_conversational_rag(index_name: str = "default"):
-    """Get or create conversational RAG engine instance for given index."""
-    _, ConversationalRAG, _ = get_rag_modules()
+    '''Get or create conversational RAG engine instance for given index.'''
     if index_name not in _conversational_rags:
-        _conversational_rags[index_name] = ConversationalRAG(index_name=index_name)
+        _conversational_rags[index_name] = ConversationalRAG(
+            index_name=index_name)
     return _conversational_rags[index_name]
 
 
-class HomeView(TemplateView):
-    """Main web interface view."""
+class IndexView(TemplateView):
+    '''Main web interface view.'''
     template_name = 'rag_app/index.html'
 
     def get_context_data(self, **kwargs):
@@ -73,31 +60,34 @@ class HomeView(TemplateView):
         return context
 
 
+class HomeView(IndexView):
+    '''Alias for IndexView to match URLs pattern.'''
+    # Inherits all functionality from IndexView
+
+
 class TestView(TemplateView):
-    """Simple test view to verify Django is working."""
+    '''Simple test view to verify Django is working.'''
     template_name = 'simple_test.html'
 
 
 @method_decorator(csrf_exempt, name='dispatch')
 class DocumentUploadView(APIView):
-    """Handle document uploads via API."""
+    '''Handle document uploads via API.'''
 
     def post(self, request):
+        '''Handle document upload via API.'''
         try:
-            _, _, DocumentProcessor = get_rag_modules()
-
             # Get or create index
-            index_name = request.POST.get('index_name', 'default')
-            index, created = DocumentIndex.objects.get_or_create(
-                name=index_name,
-                defaults={'description': f'Document index: {index_name}'}
-            )
-
             files = request.FILES.getlist('files')
             if not files:
                 return Response({
                     'error': 'No files provided'
                 }, status=status.HTTP_400_BAD_REQUEST)
+
+            index_name = request.POST.get('index_name', 'default')
+
+            # Get or create DocumentIndex
+            index, _ = DocumentIndex.objects.get_or_create(name=index_name)
 
             # Process uploaded files
             processed_files = []
@@ -105,15 +95,11 @@ class DocumentUploadView(APIView):
             total_chunks = 0
 
             rag_engine = get_rag_engine(index_name)
-            document_processor = DocumentProcessor()
 
             for file in files:
                 try:
-                    # Import here to avoid circular imports
-                    from src.config import settings as rag_settings
-
                     # Validate file
-                    max_file_size = rag_settings.max_document_size_mb * 1024 * 1024  # Convert to bytes
+                    max_file_size = rag_settings.max_document_size_mb * 1024 * 1024
                     if file.size > max_file_size:
                         errors.append(f"{file.name}: File too large")
                         continue
@@ -146,7 +132,7 @@ class DocumentUploadView(APIView):
                         processed_files.append(file.name)
                         total_chunks += (chunks_added or 0)
 
-                    except Exception as e:
+                    except (OSError, IOError, ValueError, RuntimeError) as e:
                         document.processing_error = str(e)
                         document.save()
                         errors.append(f"{file.name}: {str(e)}")
@@ -156,12 +142,14 @@ class DocumentUploadView(APIView):
                         if default_storage.exists(temp_path):
                             default_storage.delete(temp_path)
 
-                except Exception as e:
+                except (OSError, IOError, ValueError, RuntimeError) as e:
                     errors.append(f"{file.name}: {str(e)}")
 
             # Update index statistics
-            index.document_count = Document.objects.filter(index=index, processed=True).count()
-            index.chunk_count = sum(doc.chunk_count or 0 for doc in Document.objects.filter(index=index, processed=True))
+            index.document_count = Document.objects.filter(
+                index=index, processed=True).count()
+            index.chunk_count = sum(doc.chunk_count or 0 for doc in Document.objects.filter(
+                index=index, processed=True))
             index.save()
 
             return Response({
@@ -171,7 +159,7 @@ class DocumentUploadView(APIView):
                 'errors': errors
             })
 
-        except Exception as e:
+        except (OSError, IOError, ValueError, RuntimeError) as e:
             return Response({
                 'error': f'Upload failed: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -179,14 +167,13 @@ class DocumentUploadView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class QueryView(APIView):
-    """Handle document queries."""
+    '''Handle document queries.'''
 
     def post(self, request):
+        '''Handle document queries.'''
         try:
-            data = json.loads(request.body) if request.body else request.POST.dict()
-
-            # Import here to avoid circular imports
-            from src.config import settings as rag_settings
+            data = json.loads(
+                request.body) if request.body else request.POST.dict()
 
             question = data.get('question', '').strip()
             if not question:
@@ -254,7 +241,7 @@ class QueryView(APIView):
 
                 return Response(response_data)
 
-            except Exception as e:
+            except (OSError, IOError, ValueError, RuntimeError) as e:
                 return Response({
                     'error': f'Query failed: {str(e)}'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -263,7 +250,7 @@ class QueryView(APIView):
             return Response({
                 'error': 'Invalid JSON in request body'
             }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
+        except (OSError, IOError, ValueError, RuntimeError) as e:
             return Response({
                 'error': f'Request failed: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -271,11 +258,13 @@ class QueryView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ConversationalQueryView(APIView):
-    """Handle conversational queries."""
+    '''Handle conversational queries.'''
 
     def post(self, request):
+        '''Handle document queries.'''
         try:
-            data = json.loads(request.body) if request.body else request.POST.dict()
+            data = json.loads(
+                request.body) if request.body else request.POST.dict()
 
             question = data.get('question', '').strip()
             if not question:
@@ -289,7 +278,7 @@ class ConversationalQueryView(APIView):
             # Get or create session
             try:
                 index = DocumentIndex.objects.get(name=index_name)
-                query_session, created = QuerySession.objects.get_or_create(
+                query_session, _ = QuerySession.objects.get_or_create(
                     session_key=session_key,
                     index=index
                 )
@@ -325,16 +314,14 @@ class ConversationalQueryView(APIView):
                     'session_id': str(query_session.id)
                 })
 
-            except Exception as e:
-                import logging
+            except (OSError, IOError, ValueError, RuntimeError):
                 logger = logging.getLogger(__name__)
                 logger.error("Conversational query failed", exc_info=True)
                 return Response({
                     'error': 'An internal server error occurred during the conversational query.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        except Exception as e:
-            import logging
+        except (OSError, IOError, ValueError, RuntimeError):
             logger = logging.getLogger(__name__)
             logger.error("Request processing failed", exc_info=True)
             return Response({
@@ -344,7 +331,7 @@ class ConversationalQueryView(APIView):
 
 @api_view(['GET'])
 def index_stats(request):
-    """Get index statistics."""
+    '''Get index statistics.'''
     try:
         index_name = request.GET.get('index_name', 'default')
 
@@ -373,7 +360,9 @@ def index_stats(request):
                 ],
                 'recent_queries': [
                     {
-                        'question': query.question[:100] + '...' if len(query.question) > 100 else query.question,
+                        'question': (query.question[:100] + '...'
+                                   if len(query.question) > 100
+                                   else query.question),
                         'created_at': query.created_at.isoformat(),
                         'response_time': query.response_time
                     } for query in recent_queries
@@ -383,8 +372,7 @@ def index_stats(request):
 
         return Response(stats)
 
-    except Exception as e:
-        import logging
+    except (OSError, IOError, ValueError, RuntimeError):
         logger = logging.getLogger(__name__)
         logger.error("Failed to get stats", exc_info=True)
         return Response({
@@ -394,7 +382,7 @@ def index_stats(request):
 
 @api_view(['DELETE'])
 def clear_conversation(request):
-    """Clear conversation history for current session."""
+    '''Clear conversation history for current session.'''
     try:
         session_key = request.session.session_key
         if not session_key:
@@ -410,8 +398,7 @@ def clear_conversation(request):
 
         return Response({'message': 'Conversation cleared successfully'})
 
-    except Exception as e:
-        import logging
+    except (OSError, IOError, ValueError, RuntimeError):
         logger = logging.getLogger(__name__)
         logger.error("Failed to clear conversation", exc_info=True)
         return Response({
@@ -421,10 +408,10 @@ def clear_conversation(request):
 
 @api_view(['GET'])
 def health_check(request):
-    """Health check endpoint."""
-    # Use a safer approach to get index names
+    '''Health check endpoint.'''
+    # pylint: disable=unused-argument
     indexes = [index.name for index in DocumentIndex.objects.only('name')]
-    
+
     return Response({
         'status': 'healthy',
         'message': 'RAG Document Q&A API is running',

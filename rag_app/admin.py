@@ -1,7 +1,7 @@
 """
 Admin configuration for RAG app models.
 """
-from typing import Union, List, Sequence, Any
+
 from django.contrib import admin
 from django.http import HttpRequest
 from .models import DocumentIndex, Document, QuerySession, Query
@@ -9,16 +9,21 @@ from .models import DocumentIndex, Document, QuerySession, Query
 
 @admin.register(DocumentIndex)
 class DocumentIndexAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description', 'document_count', 'chunk_count', 'created_at', 'updated_at')
+    '''Admin interface for DocumentIndex model.'''
+    list_display = ('name', 'description', 'document_count',
+                    'chunk_count', 'created_at', 'updated_at')
     list_filter = ('created_at', 'updated_at')
     search_fields = ('name', 'description')
-    readonly_fields = ('id', 'created_at', 'updated_at', 'document_count', 'chunk_count')
+    readonly_fields = ('id', 'created_at', 'updated_at',
+                       'document_count', 'chunk_count')
     ordering = ('-updated_at',)
 
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    list_display = ('original_filename', 'index', 'file_type', 'file_size', 'processed', 'uploaded_at')
+    '''Admin interface for Document model.'''
+    list_display = ('original_filename', 'index', 'file_type',
+                    'file_size', 'processed', 'uploaded_at')
     list_filter = ('processed', 'file_type', 'uploaded_at', 'index')
     search_fields = ('original_filename', 'filename')
     readonly_fields = ('id', 'uploaded_at', 'file_size')
@@ -33,6 +38,7 @@ class DocumentAdmin(admin.ModelAdmin):
 
 @admin.register(QuerySession)
 class QuerySessionAdmin(admin.ModelAdmin):
+    '''Admin interface for QuerySession model.'''
     list_display = ('session_key', 'index', 'user', 'created_at', 'updated_at')
     list_filter = ('index', 'created_at')
     search_fields = ('session_key',)
@@ -42,13 +48,16 @@ class QuerySessionAdmin(admin.ModelAdmin):
 
 @admin.register(Query)
 class QueryAdmin(admin.ModelAdmin):
-    list_display = ('question_preview', 'index', 'session', 'response_time', 'created_at')
+    '''Admin interface for Query model.'''
+    list_display = ('question_preview', 'index', 'session',
+                    'response_time', 'created_at')
     list_filter = ('index', 'created_at', 'include_sources', 'include_scores')
     search_fields = ('question', 'answer')
     readonly_fields = ('id', 'created_at', 'response_time')
     ordering = ('-created_at',)
 
     def question_preview(self, obj):
+        '''Preview of the question text.'''
         return obj.question[:50] + '...' if len(obj.question) > 50 else obj.question
     question_preview.short_description = 'Question'  # type: ignore
 

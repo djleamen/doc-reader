@@ -1,12 +1,12 @@
 """
 RAG (Retrieval-Augmented Generation) engine for document Q&A.
 """
-from typing import List, Dict, Any, Optional, Tuple
+
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from langchain_openai import OpenAI, ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.schema import Document
 from langchain.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
 from loguru import logger
 
 from src.config import settings
@@ -17,7 +17,7 @@ from src.semantic_coherence import SemanticCoherenceValidator, CoherenceMetrics,
 
 @dataclass
 class QueryResult:
-    """Result of a Q&A query."""
+    '''Result of a Q&A query.'''
     query: str
     answer: str
     source_documents: List[Document]
@@ -28,13 +28,13 @@ class QueryResult:
 
 
 class RAGEngine:
-    """Main RAG engine for document Q&A."""
+    '''Main RAG engine for document Q&A.'''
 
     def __init__(self, index_name: str = "default", enable_coherence_validation: bool = True):
         self.index_name = index_name
         self.document_index = DocumentIndex(index_name)
         self.document_processor = DocumentProcessor()
-        
+
         # Initialize semantic coherence validator
         self.enable_coherence_validation = enable_coherence_validation
         if enable_coherence_validation:
@@ -58,8 +58,8 @@ class RAGEngine:
         logger.info(f"RAG Engine initialized with index: {index_name}")
 
     def _create_prompt_template(self) -> PromptTemplate:
-        """Create the prompt template for Q&A."""
-        template = """You are a helpful AI assistant that answers questions based on the provided document context.
+        '''Create the prompt template for Q&A.'''
+        template = '''You are a helpful AI assistant that answers questions based on the provided document context.
 Use only the information from the context to answer questions. If the context doesn't contain enough information
 to answer the question, say so clearly.
 
@@ -76,7 +76,7 @@ Instructions:
 5. If there are multiple relevant pieces of information, synthesize them
 6. Respond in paragraph format, avoid using markdown
 
-Answer:"""
+Answer:'''
 
         return PromptTemplate(
             template=template,
@@ -84,13 +84,14 @@ Answer:"""
         )
 
     def add_documents(self, file_paths: List[str], metadata: Dict[str, Any] = None) -> int:
-        """Add documents to the RAG system."""
+        '''Add documents to the RAG system.'''
         all_documents = []
 
         for file_path in file_paths:
             try:
                 logger.info(f"Processing document: {file_path}")
-                documents = self.document_processor.process_document(file_path, metadata)
+                documents = self.document_processor.process_document(
+                    file_path, metadata)
                 all_documents.extend(documents)
                 logger.info(f"Added {len(documents)} chunks from {file_path}")
             except Exception as e:
@@ -99,7 +100,8 @@ Answer:"""
 
         if all_documents:
             self.document_index.add_documents(all_documents)
-            logger.info(f"Successfully added {len(all_documents)} total document chunks")
+            logger.info(
+                f"Successfully added {len(all_documents)} total document chunks")
             return len(all_documents)
         else:
             logger.warning("No documents were successfully processed")
@@ -113,7 +115,7 @@ Answer:"""
         include_scores: bool = True,
         enable_coherence_fallback: bool = True
     ) -> QueryResult:
-        """Query the RAG system with a question."""
+        '''Query the RAG system with a question.'''
         logger.info(f"Processing query: {question}")
 
         k = k or settings.top_k_results
@@ -121,9 +123,11 @@ Answer:"""
 
         # Retrieve relevant documents
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
-            doc_score_pairs = self.document_index.search_with_scores(question, k)
+            doc_score_pairs = self.document_index.search_with_scores(
+                question, k)
             source_documents = [doc for doc, score in doc_score_pairs]
-            confidence_scores = [float(score) for doc, score in doc_score_pairs]
+            confidence_scores = [float(score)
+                                 for doc, score in doc_score_pairs]
         else:
             source_documents = self.document_index.search(question, k)
             confidence_scores = [1.0] * len(source_documents)
@@ -142,7 +146,8 @@ Answer:"""
         context = self._prepare_context(source_documents)
 
         # Generate answer
-        prompt = self.prompt_template.format(context=context, question=question)
+        prompt = self.prompt_template.format(
+            context=context, question=question)
 
         try:
             answer = self.llm.predict(prompt)
@@ -155,7 +160,7 @@ Answer:"""
         coherence_metrics = None
         fallback_action = None
         final_answer = answer
-        
+
         if self.enable_coherence_validation and self.coherence_validator and enable_coherence_fallback:
             try:
                 coherence_metrics, fallback_action = self.coherence_validator.validate_coherence(
@@ -164,53 +169,66 @@ Answer:"""
                     generated_answer=answer,
                     chunk_scores=confidence_scores
                 )
-                
+
                 # Apply fallback behaviors
-                if fallback_action.needs_fallback or coherence_metrics.needs_fallback:
-                    logger.info(f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
-                    
+                if coherence_metrics.needs_fallback:
+                    logger.info(
+                        f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
+
                     # 1. Boost k if needed and re-retrieve
                     if fallback_action.boost_k and fallback_action.new_k_value and fallback_action.new_k_value > original_k:
-                        logger.info(f"Boosting k from {original_k} to {fallback_action.new_k_value}")
-                        
+                        logger.info(
+                            f"Boosting k from {original_k} to {fallback_action.new_k_value}")
+
                         # Re-retrieve with boosted k
                         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
-                            boosted_doc_score_pairs = self.document_index.search_with_scores(question, fallback_action.new_k_value)
-                            boosted_source_documents = [doc for doc, score in boosted_doc_score_pairs]
-                            boosted_confidence_scores = [float(score) for doc, score in boosted_doc_score_pairs]
+                            boosted_doc_score_pairs = self.document_index.search_with_scores(
+                                question, fallback_action.new_k_value)
+                            boosted_source_documents = [
+                                doc for doc, score in boosted_doc_score_pairs]
+                            boosted_confidence_scores = [
+                                float(score) for doc, score in boosted_doc_score_pairs]
                         else:
-                            boosted_source_documents = self.document_index.search(question, fallback_action.new_k_value)
-                            boosted_confidence_scores = [1.0] * len(boosted_source_documents)
-                        
+                            boosted_source_documents = self.document_index.search(
+                                question, fallback_action.new_k_value)
+                            boosted_confidence_scores = [
+                                1.0] * len(boosted_source_documents)
+
                         # Re-generate with expanded context if we got more documents
                         if len(boosted_source_documents) > len(source_documents):
-                            boosted_context = self._prepare_context(boosted_source_documents)
-                            boosted_prompt = self.prompt_template.format(context=boosted_context, question=question)
-                            
+                            boosted_context = self._prepare_context(
+                                boosted_source_documents)
+                            boosted_prompt = self.prompt_template.format(
+                                context=boosted_context, question=question)
+
                             try:
-                                boosted_answer = self.llm.predict(boosted_prompt)
-                                logger.info("Successfully regenerated answer with boosted retrieval")
-                                
+                                boosted_answer = self.llm.predict(
+                                    boosted_prompt)
+                                logger.info(
+                                    "Successfully regenerated answer with boosted retrieval")
+
                                 # Update variables for final result
                                 source_documents = boosted_source_documents
                                 confidence_scores = boosted_confidence_scores
                                 context = boosted_context
                                 answer = boosted_answer
-                                
+
                             except Exception as e:
-                                logger.error(f"Error regenerating answer with boosted k: {e}")
+                                logger.error(
+                                    f"Error regenerating answer with boosted k: {e}")
                                 # Keep original answer
-                    
+
                     # 2. Apply hedging to output
                     if fallback_action.hedge_output:
-                        final_answer = self.coherence_validator.get_hedged_response(answer, coherence_metrics)
+                        final_answer = self.coherence_validator.get_hedged_response(
+                            answer, coherence_metrics)
                         logger.debug("Applied hedging to response")
-                    
+
                     # 3. Add uncertainty warning if flagged
                     if fallback_action.flag_uncertainty and fallback_action.uncertainty_message:
                         final_answer = fallback_action.uncertainty_message + "\n\n" + final_answer
                         logger.debug("Added uncertainty flag to response")
-                
+
             except Exception as e:
                 logger.error(f"Error during coherence validation: {e}")
                 # Continue with original answer if coherence validation fails
@@ -225,7 +243,7 @@ Answer:"""
             "final_k": len(source_documents),
             "coherence_validation_enabled": self.enable_coherence_validation
         }
-        
+
         if coherence_metrics:
             metadata.update({
                 "coherence_level": coherence_metrics.coherence_level.value,
@@ -248,7 +266,7 @@ Answer:"""
         return result
 
     def _prepare_context(self, documents: List[Document]) -> str:
-        """Prepare context string from retrieved documents."""
+        '''Prepare context string from retrieved documents.'''
         context_parts = []
 
         for i, doc in enumerate(documents, 1):
@@ -263,7 +281,7 @@ Answer:"""
         return "\n".join(context_parts)
 
     def batch_query(self, questions: List[str], **kwargs) -> List[QueryResult]:
-        """Process multiple queries in batch."""
+        '''Process multiple queries in batch.'''
         results = []
 
         for question in questions:
@@ -285,7 +303,7 @@ Answer:"""
         return results
 
     def get_index_stats(self) -> Dict[str, Any]:
-        """Get statistics about the document index."""
+        '''Get statistics about the document index.'''
         # This would need to be implemented based on the vector store
         # For now, return basic info
         return {
@@ -297,13 +315,13 @@ Answer:"""
         }
 
     def clear_index(self) -> None:
-        """Clear the document index."""
+        '''Clear the document index.'''
         self.document_index = DocumentIndex(self.index_name)
         logger.info("Document index cleared")
 
 
 class ConversationalRAG(RAGEngine):
-    """Extended RAG engine with conversation memory."""
+    '''Extended RAG engine with conversation memory.'''
 
     def __init__(self, index_name: str = "default", enable_coherence_validation: bool = True):
         super().__init__(index_name, enable_coherence_validation)
@@ -311,7 +329,7 @@ class ConversationalRAG(RAGEngine):
         self.max_history_length = 10
 
     def conversational_query(self, question: str, **kwargs) -> QueryResult:
-        """Query with conversation context."""
+        '''Query with conversation context.'''
         # Add conversation context to the question if history exists
         if self.conversation_history:
             context_question = self._add_conversation_context(question)
@@ -334,7 +352,7 @@ class ConversationalRAG(RAGEngine):
         return result
 
     def _add_conversation_context(self, question: str) -> str:
-        """Add conversation history to the current question."""
+        '''Add conversation history to the current question.'''
         if not self.conversation_history:
             return question
 
@@ -344,13 +362,14 @@ class ConversationalRAG(RAGEngine):
         recent_history = self.conversation_history[-3:]  # Last 3 exchanges
         for i, exchange in enumerate(recent_history, 1):
             context_parts.append(f"Q{i}: {exchange['question']}")
-            context_parts.append(f"A{i}: {exchange['answer'][:200]}...")  # Truncate long answers
+            # Truncate long answers
+            context_parts.append(f"A{i}: {exchange['answer'][:200]}...")
 
         context_parts.append(f"\nCurrent question: {question}")
 
         return "\n".join(context_parts)
 
     def clear_conversation(self) -> None:
-        """Clear conversation history."""
+        '''Clear conversation history.'''
         self.conversation_history = []
         logger.info("Conversation history cleared")

@@ -1,14 +1,17 @@
 """
 Models for the RAG Document Q&A system.
 """
+
 import uuid
 
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.db import models
+
+User = get_user_model()
 
 
 class DocumentIndex(models.Model):
-    """Model to track document indexes."""
+    '''Model to track document indexes.'''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
@@ -18,6 +21,7 @@ class DocumentIndex(models.Model):
     chunk_count = models.IntegerField(default=0)
 
     class Meta:
+        '''Meta options for DocumentIndex model.'''
         ordering = ['-updated_at']
 
     def __str__(self):
@@ -25,9 +29,10 @@ class DocumentIndex(models.Model):
 
 
 class Document(models.Model):
-    """Model to track uploaded documents."""
+    '''Model to track uploaded documents.'''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    index = models.ForeignKey(DocumentIndex, on_delete=models.CASCADE, related_name='documents')
+    index = models.ForeignKey(
+        DocumentIndex, on_delete=models.CASCADE, related_name='documents')
     filename = models.CharField(max_length=500)
     original_filename = models.CharField(max_length=500)
     file_path = models.CharField(max_length=1000)
@@ -39,6 +44,7 @@ class Document(models.Model):
     processing_error = models.TextField(blank=True)
 
     class Meta:
+        '''Meta options for Document model.'''
         ordering = ['-uploaded_at']
 
     def __str__(self):
@@ -46,22 +52,25 @@ class Document(models.Model):
 
 
 class QuerySession(models.Model):
-    """Model to track query sessions for conversational mode."""
+    '''Model to track query sessions for conversational mode.'''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, null=True, blank=True)
     session_key = models.CharField(max_length=255, db_index=True)
     index = models.ForeignKey(DocumentIndex, on_delete=models.CASCADE)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        '''Meta options for QuerySession model.'''
         ordering = ['-updated_at']
 
 
 class Query(models.Model):
-    """Model to track individual queries."""
+    '''Model to track individual queries.'''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    session = models.ForeignKey(QuerySession, on_delete=models.CASCADE, related_name='queries', null=True, blank=True)
+    session = models.ForeignKey(
+        QuerySession, on_delete=models.CASCADE, related_name='queries', null=True, blank=True)
     index = models.ForeignKey(DocumentIndex, on_delete=models.CASCADE)
     question = models.TextField()
     answer = models.TextField()
@@ -77,6 +86,7 @@ class Query(models.Model):
     model_used = models.CharField(max_length=100, blank=True)
 
     class Meta:
+        '''Meta options for Query model.'''
         ordering = ['-created_at']
 
     def __str__(self):

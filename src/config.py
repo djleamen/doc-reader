@@ -1,6 +1,7 @@
 """
 Configuration management for the RAG Document Q&A system.
 """
+
 import os
 from typing import List
 
@@ -8,9 +9,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-
 class Settings:
-    """Application settings with environment variable support."""
+    '''Application settings with environment variable support.'''
 
     def __init__(self):
         # API Keys
@@ -58,7 +58,7 @@ class Settings:
 
     @property
     def supported_formats_list(self) -> List[str]:
-        """Get supported formats as a list."""
+        '''Get supported formats as a list.'''
         return [fmt.strip() for fmt in self.supported_formats.split(',')]
 
 

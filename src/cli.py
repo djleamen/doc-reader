@@ -1,20 +1,18 @@
 """
 Command-line interface for the RAG Document Q&A system.
 """
+
 import argparse
 import sys
 from pathlib import Path
-from typing import List
 import json
 
 from loguru import logger
 from src.config import settings
 from src.rag_engine import RAGEngine, ConversationalRAG
-from src.document_processor import DocumentProcessor
-
 
 def setup_logging():
-    """Setup logging configuration."""
+    '''Setup logging configuration.'''
     logger.remove()
     logger.add(
         sys.stderr,
@@ -29,7 +27,7 @@ def setup_logging():
 
 
 def add_documents_command(args):
-    """Add documents to the RAG system."""
+    '''Add documents to the RAG system.'''
     logger.info(f"Adding documents to index: {args.index_name}")
 
     rag_engine = RAGEngine(args.index_name)
@@ -55,7 +53,7 @@ def add_documents_command(args):
 
 
 def query_command(args):
-    """Query the RAG system."""
+    '''Query the RAG system.'''
     logger.info(f"Querying index: {args.index_name}")
 
     if args.conversational:
@@ -112,7 +110,7 @@ def query_command(args):
 
 
 def interactive_mode(args):
-    """Interactive Q&A mode."""
+    '''Interactive Q&A mode.'''
     logger.info(f"Starting interactive mode with index: {args.index_name}")
 
     if args.conversational:
@@ -172,7 +170,7 @@ def interactive_mode(args):
 
 
 def list_indexes_command(args):
-    """List available indexes."""
+    '''List available indexes.'''
     index_dir = Path(settings.index_dir)
 
     if not index_dir.exists():
@@ -190,7 +188,7 @@ def list_indexes_command(args):
 
 
 def stats_command(args):
-    """Show index statistics."""
+    '''Show index statistics.'''
     rag_engine = RAGEngine(args.index_name)
     stats = rag_engine.get_index_stats()
 
@@ -200,7 +198,7 @@ def stats_command(args):
 
 
 def clear_index_command(args):
-    """Clear an index."""
+    '''Clear an index.'''
     if args.confirm or input(f"Are you sure you want to clear index '{args.index_name}'? (y/N): ").lower() == 'y':
         rag_engine = RAGEngine(args.index_name)
         rag_engine.clear_index()
@@ -210,7 +208,7 @@ def clear_index_command(args):
 
 
 def main():
-    """Main CLI entry point."""
+    '''Main CLI entry point.'''
     setup_logging()
 
     parser = argparse.ArgumentParser(description="RAG Document Q&A System CLI")

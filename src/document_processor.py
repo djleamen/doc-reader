@@ -1,22 +1,20 @@
 """
 Document processing utilities for various file formats.
 """
-import os
-import magic
-from typing import List, Dict, Any
+
 from pathlib import Path
-from loguru import logger
+from typing import Any, Dict, List
 
 import pypdf
 from docx import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document as LangChainDocument
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from loguru import logger
 
 from src.config import settings
 
-
 class DocumentProcessor:
-    """Handles document loading, processing, and chunking."""
+    '''Handles document loading, processing, and chunking.'''
 
     def __init__(self):
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -27,7 +25,7 @@ class DocumentProcessor:
         )
 
     def load_document(self, file_path: str) -> str:
-        """Load and extract text from various document formats."""
+        '''Load and extract text from various document formats.'''
         file_path = Path(file_path)
 
         if not file_path.exists():
@@ -55,7 +53,7 @@ class DocumentProcessor:
             raise ValueError(f"Handler not implemented for: {file_extension}")
 
     def _load_pdf(self, file_path: Path) -> str:
-        """Extract text from PDF files."""
+        '''Extract text from PDF files.'''
         text = ""
         try:
             with open(file_path, 'rb') as file:
@@ -74,7 +72,7 @@ class DocumentProcessor:
         return text.strip()
 
     def _load_docx(self, file_path: Path) -> str:
-        """Extract text from DOCX files."""
+        '''Extract text from DOCX files.'''
         try:
             doc = Document(file_path)
             text = ""
@@ -95,7 +93,7 @@ class DocumentProcessor:
             raise
 
     def _load_text(self, file_path: Path) -> str:
-        """Load plain text files."""
+        '''Load plain text files.'''
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 return file.read().strip()
@@ -105,7 +103,7 @@ class DocumentProcessor:
                 return file.read().strip()
 
     def chunk_document(self, text: str, metadata: Dict[str, Any] = None) -> List[LangChainDocument]:
-        """Split document into chunks for vector storage."""
+        '''Split document into chunks for vector storage.'''
         if metadata is None:
             metadata = {}
 
@@ -127,7 +125,7 @@ class DocumentProcessor:
         return documents
 
     def process_document(self, file_path: str, additional_metadata: Dict[str, Any] = None) -> List[LangChainDocument]:
-        """Complete document processing pipeline."""
+        '''Complete document processing pipeline.'''
         file_path = Path(file_path)
 
         # Load document text

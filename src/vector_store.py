@@ -1,6 +1,7 @@
 """
 Vector database management for document embeddings.
 """
+
 import os
 import pickle
 import json
@@ -22,48 +23,48 @@ from src.config import settings
 
 
 class LocalEmbeddings(Embeddings):
-    """Local embeddings using sentence-transformers."""
+    '''Local embeddings using sentence-transformers.'''
     
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model = SentenceTransformer(model_name)
     
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """Embed a list of documents."""
+        '''Embed a list of documents.'''
         embeddings = self.model.encode(texts)
         return embeddings.tolist()
     
     def embed_query(self, text: str) -> List[float]:
-        """Embed a single query."""
+        '''Embed a single query.'''
         embedding = self.model.encode([text])
         return embedding[0].tolist()
 
 
 class VectorStoreManager(ABC):
-    """Abstract base class for vector store implementations."""
+    '''Abstract base class for vector store implementations.'''
 
     @abstractmethod
     def add_documents(self, documents: List[Document]) -> None:
-        """Add documents to the vector store."""
+        '''Add documents to the vector store.'''
         pass
 
     @abstractmethod
     def similarity_search(self, query: str, k: int = None) -> List[Document]:
-        """Search for similar documents."""
+        '''Search for similar documents.'''
         pass
 
     @abstractmethod
     def save(self, path: str) -> None:
-        """Save the vector store to disk."""
+        '''Save the vector store to disk.'''
         pass
 
     @abstractmethod
     def load(self, path: str) -> None:
-        """Load the vector store from disk."""
+        '''Load the vector store from disk.'''
         pass
 
 
 class FAISSVectorStore(VectorStoreManager):
-    """FAISS-based vector store implementation."""
+    '''FAISS-based vector store implementation.'''
 
     def __init__(self):
         # Choose embeddings based on configuration
@@ -83,7 +84,7 @@ class FAISSVectorStore(VectorStoreManager):
         self.documents: List[Document] = []
 
     def add_documents(self, documents: List[Document]) -> None:
-        """Add documents to FAISS vector store."""
+        '''Add documents to FAISS vector store.'''
         logger.info(f"Adding {len(documents)} documents to FAISS store")
 
         if self.vector_store is None:
@@ -95,7 +96,7 @@ class FAISSVectorStore(VectorStoreManager):
         logger.info(f"Total documents in store: {len(self.documents)}")
 
     def similarity_search(self, query: str, k: int = None) -> List[Document]:
-        """Search for similar documents using FAISS."""
+        '''Search for similar documents using FAISS.'''
         if self.vector_store is None:
             raise ValueError("Vector store not initialized. Add documents first.")
 
@@ -106,7 +107,7 @@ class FAISSVectorStore(VectorStoreManager):
         return results
 
     def similarity_search_with_score(self, query: str, k: int = None) -> List[tuple]:
-        """Search with similarity scores."""
+        '''Search with similarity scores.'''
         if self.vector_store is None:
             raise ValueError("Vector store not initialized. Add documents first.")
 
@@ -117,7 +118,7 @@ class FAISSVectorStore(VectorStoreManager):
         return results
 
     def save(self, path: str) -> None:
-        """Save FAISS index and metadata to disk."""
+        '''Save FAISS index and metadata to disk.'''
         if self.vector_store is None:
             raise ValueError("No vector store to save")
 
@@ -143,7 +144,7 @@ class FAISSVectorStore(VectorStoreManager):
         logger.info(f"Vector store saved to {path}")
 
     def load(self, path: str) -> None:
-        """Load FAISS index from disk."""
+        '''Load FAISS index from disk.'''
         path = Path(path)
         faiss_path = path / "faiss_index"
 
@@ -167,7 +168,7 @@ class FAISSVectorStore(VectorStoreManager):
 
 
 class ChromaVectorStore(VectorStoreManager):
-    """ChromaDB-based vector store implementation."""
+    '''ChromaDB-based vector store implementation.'''
 
     def __init__(self):
         try:
@@ -185,7 +186,7 @@ class ChromaVectorStore(VectorStoreManager):
             raise ImportError("ChromaDB not installed. Install with: pip install chromadb")
 
     def add_documents(self, documents: List[Document]) -> None:
-        """Add documents to Chroma vector store."""
+        '''Add documents to Chroma vector store.'''
         from langchain_community.vectorstores import Chroma
 
         logger.info(f"Adding {len(documents)} documents to Chroma store")
@@ -202,7 +203,7 @@ class ChromaVectorStore(VectorStoreManager):
         logger.info("Documents added to Chroma store")
 
     def similarity_search(self, query: str, k: int = None) -> List[Document]:
-        """Search for similar documents using Chroma."""
+        '''Search for similar documents using Chroma.'''
         if self.vector_store is None:
             raise ValueError("Vector store not initialized. Add documents first.")
 
@@ -213,12 +214,12 @@ class ChromaVectorStore(VectorStoreManager):
         return results
 
     def save(self, path: str) -> None:
-        """Save Chroma collection."""
+        '''Save Chroma collection.'''
         # Chroma automatically persists data
         logger.info("Chroma vector store automatically persisted")
 
     def load(self, path: str) -> None:
-        """Load Chroma collection."""
+        '''Load Chroma collection.'''
         from langchain_community.vectorstores import Chroma
 
         self.vector_store = Chroma(
@@ -229,11 +230,11 @@ class ChromaVectorStore(VectorStoreManager):
 
 
 class VectorStoreFactory:
-    """Factory for creating vector store instances."""
+    '''Factory for creating vector store instances.'''
 
     @staticmethod
     def create_vector_store(store_type: str = None) -> VectorStoreManager:
-        """Create a vector store instance based on configuration."""
+        '''Create a vector store instance based on configuration.'''
         store_type = store_type or settings.vector_db_type
 
         if store_type.lower() == "faiss":
@@ -245,7 +246,7 @@ class VectorStoreFactory:
 
 
 class DocumentIndex:
-    """High-level document indexing and search interface."""
+    '''High-level document indexing and search interface.'''
 
     def __init__(self, index_name: str = "default"):
         import re
@@ -273,16 +274,16 @@ class DocumentIndex:
                 logger.warning(f"Could not load existing index: {e}")
 
     def add_documents(self, documents: List[Document]) -> None:
-        """Add documents to the index."""
+        '''Add documents to the index.'''
         self.vector_store.add_documents(documents)
         self.save_index()
 
     def search(self, query: str, k: int = None) -> List[Document]:
-        """Search the document index."""
+        '''Search the document index.'''
         return self.vector_store.similarity_search(query, k)
 
     def search_with_scores(self, query: str, k: int = None) -> List[tuple]:
-        """Search with similarity scores if supported."""
+        '''Search with similarity scores if supported.'''
         if hasattr(self.vector_store, 'similarity_search_with_score'):
             return self.vector_store.similarity_search_with_score(query, k)
         else:
@@ -291,9 +292,9 @@ class DocumentIndex:
             return [(doc, 1.0) for doc in docs]
 
     def save_index(self) -> None:
-        """Save the index to disk."""
+        '''Save the index to disk.'''
         self.vector_store.save(str(self.index_path))
 
     def load_index(self) -> None:
-        """Load the index from disk."""
+        '''Load the index from disk.'''
         self.vector_store.load(str(self.index_path))
