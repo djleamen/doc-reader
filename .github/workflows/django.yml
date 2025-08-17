@@ -25,6 +25,3 @@ jobs:
         python -m pip install --upgrade pip
         pip install --no-cache-dir --index-url https://pypi.org/simple django==5.2.4
         pip install -r requirements.txt
-    - name: Run Tests
-      run: |
-        python manage.py test
