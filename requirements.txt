@@ -1,9 +1,12 @@
 # Core dependencies for RAG system
-langchain==0.2.17
-# Resolve conflict: use a langchain-community version compatible with langchain-core<0.3.0 required by langchain==0.2.17
-# Allow pip to pick the latest 0.2.x release
-langchain-community>=0.2,<0.3
-langchain-openai==0.1.23
+# Use individual split packages for compatibility and security
+langchain-core>=0.3.0,<0.4.0
+# Patched, non-vulnerable community package (resolves GHSA-pc6w-59fv-rh23)
+langchain-community==0.3.29
+# Compatible with langchain-core 0.3.x
+langchain-openai>=0.2.0,<0.3.0
+# Text splitters extracted from monolithic langchain in 0.3.x
+langchain-text-splitters>=0.3.0,<0.4.0
 faiss-cpu>=1.8.0
 openai>=1.40.0,<2.0.0
 tiktoken>=0.7.0
