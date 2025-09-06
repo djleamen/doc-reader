@@ -7,8 +7,8 @@ from typing import Any, Dict, List
 
 import pypdf
 from docx import Document
-from langchain.schema import Document as LangChainDocument
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document as LangChainDocument
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from loguru import logger
 
 from src.config import settings

@@ -1,7 +1,7 @@
 # Core dependencies for RAG system
-langchain==0.2.17
-langchain-community==0.3.29
-langchain-openai==0.1.23
+langchain==0.3.27
+langchain-community==0.3.27
+langchain-openai==0.2.8
 faiss-cpu>=1.8.0
 openai>=1.40.0,<2.0.0
 tiktoken>=0.7.0
@@ -34,7 +34,7 @@ tqdm==4.66.4
 # Configuration and logging
 python-dotenv==1.0.1
 pydantic>=2.0,<3.0
-pydantic-settings==2.3.4
+pydantic-settings==2.4.0
 loguru==0.7.2
 
 # Testing
