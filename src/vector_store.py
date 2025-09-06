@@ -13,9 +13,9 @@ import faiss
 import numpy as np
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.schema import Document
+from langchain_core.documents import Document
 from langchain_core.vectorstores import VectorStore
-from langchain.embeddings.base import Embeddings
+from langchain_core.embeddings import Embeddings
 from sentence_transformers import SentenceTransformer
 from loguru import logger
 
