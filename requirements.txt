@@ -1,6 +1,8 @@
 # Core dependencies for RAG system
 langchain==0.2.17
-langchain-community==0.3.29
+# Resolve conflict: use a langchain-community version compatible with langchain-core<0.3.0 required by langchain==0.2.17
+# Allow pip to pick the latest 0.2.x release
+langchain-community>=0.2,<0.3
 langchain-openai==0.1.23
 faiss-cpu>=1.8.0
 openai>=1.40.0,<2.0.0
