@@ -5,8 +5,8 @@ RAG (Retrieval-Augmented Generation) engine for document Q&A.
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from langchain_openai import ChatOpenAI
-from langchain.schema import Document
-from langchain.prompts import PromptTemplate
+from langchain_core.documents import Document
+from langchain_core.prompts import PromptTemplate
 from loguru import logger
 
 from src.config import settings
