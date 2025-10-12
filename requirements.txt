@@ -21,7 +21,7 @@ sentence-transformers==2.7.0
 pinecone-client>=4.1.1
 
 # Django web framework and API
-django==5.2.4
+django==5.2.7
 djangorestframework==3.16.0
 django-cors-headers==4.5.0
 
