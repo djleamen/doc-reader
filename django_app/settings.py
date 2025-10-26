@@ -20,11 +20,7 @@ DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
-    if DEBUG:
-        # Only use fallback in debug mode
-        SECRET_KEY = 'django-insecure-dev-only-' + os.urandom(32).hex()
-    else:
-        raise ValueError("DJANGO_SECRET_KEY environment variable must be set in production")
+    raise ValueError("DJANGO_SECRET_KEY environment variable must be set in production")
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') + ['testserver']
 
