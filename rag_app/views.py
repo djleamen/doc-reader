@@ -273,7 +273,7 @@ class ConversationalQueryView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             index_name = data.get('index_name', 'default')
-            
+
             # Ensure session exists and has a key
             if not request.session.session_key:
                 request.session.create()

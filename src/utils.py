@@ -112,7 +112,7 @@ def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
         'after', 'above', 'below', 'between', 'among', 'this', 'that', 'these',
         'those', 'is', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had',
         'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
-        'must', 'can', 'shall', 'a', 'an', 'as', 'if', 'or', 'because', 'while',
+        'must', 'can', 'shall', 'a', 'an', 'as', 'if', 'because', 'while',
         'when', 'where', 'how', 'what', 'which', 'who', 'whom', 'whose', 'why'
     }
 

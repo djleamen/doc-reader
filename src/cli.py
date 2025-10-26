@@ -53,6 +53,59 @@ def add_documents_command(args):
         sys.exit(1)
 
 
+def _print_query_result(result, args):
+    '''Print query result with optional sources and metadata.'''
+    print("\n" + "="*80)
+    print("QUESTION:")
+    print(args.question)
+    print("\n" + "-"*80)
+    print("ANSWER:")
+    print(result.answer)
+
+    if args.include_sources and result.source_documents:
+        _print_source_documents(result, args)
+
+    print("\n" + "-"*80)
+    print("METADATA:")
+    print(json.dumps(result.metadata, indent=2))
+    print("="*80)
+
+
+def _print_source_documents(result, args):
+    '''Print source documents with scores.'''
+    print("\n" + "-"*80)
+    print("SOURCE DOCUMENTS:")
+    for i, doc in enumerate(result.source_documents, 1):
+        score_text = ""
+        if args.include_scores and i <= len(result.confidence_scores):
+            score_text = f" (Score: {result.confidence_scores[i-1]:.4f})"
+
+        print(f"\nSource {i}{score_text}:")
+        print(f"File: {doc.metadata.get('filename', 'Unknown')}")
+        print(f"Chunk: {doc.metadata.get('chunk_id', 'Unknown')}")
+        print("Content:")
+        print(doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content)
+
+
+def _execute_query(rag_engine, args):
+    '''Execute query based on engine type.'''
+    if args.conversational:
+        assert isinstance(rag_engine, ConversationalRAG)
+        return rag_engine.conversational_query(
+            question=args.question,
+            k=args.top_k,
+            include_sources=args.include_sources,
+            include_scores=args.include_scores
+        )
+    else:
+        return rag_engine.query(
+            question=args.question,
+            k=args.top_k,
+            include_sources=args.include_sources,
+            include_scores=args.include_scores
+        )
+
+
 def query_command(args):
     '''Query the RAG system.'''
     logger.info(f"Querying index: {args.index_name}")
@@ -64,53 +117,47 @@ def query_command(args):
         rag_engine = RAGEngine(args.index_name)
 
     try:
-        if args.conversational:
-            # Type narrowing: rag_engine is ConversationalRAG here
-            assert isinstance(rag_engine, ConversationalRAG)
-            result = rag_engine.conversational_query(
-                question=args.question,
-                k=args.top_k,
-                include_sources=args.include_sources,
-                include_scores=args.include_scores
-            )
-        else:
-            result = rag_engine.query(
-                question=args.question,
-                k=args.top_k,
-                include_sources=args.include_sources,
-                include_scores=args.include_scores
-            )
-
-        # Print results
-        print("\n" + "="*80)
-        print("QUESTION:")
-        print(args.question)
-        print("\n" + "-"*80)
-        print("ANSWER:")
-        print(result.answer)
-
-        if args.include_sources and result.source_documents:
-            print("\n" + "-"*80)
-            print("SOURCE DOCUMENTS:")
-            for i, doc in enumerate(result.source_documents, 1):
-                score_text = ""
-                if args.include_scores and i <= len(result.confidence_scores):
-                    score_text = f" (Score: {result.confidence_scores[i-1]:.4f})"
-
-                print(f"\nSource {i}{score_text}:")
-                print(f"File: {doc.metadata.get('filename', 'Unknown')}")
-                print(f"Chunk: {doc.metadata.get('chunk_id', 'Unknown')}")
-                print("Content:")
-                print(doc.page_content[:500] + "..." if len(doc.page_content) > 500 else doc.page_content)
-
-        print("\n" + "-"*80)
-        print("METADATA:")
-        print(json.dumps(result.metadata, indent=2))
-        print("="*80)
-
+        result = _execute_query(rag_engine, args)
+        _print_query_result(result, args)
     except Exception as e:
         logger.error(f"Error querying documents: {e}")
         sys.exit(1)
+
+
+def _handle_clear_command(rag_engine, args):
+    '''Handle clear conversation command.'''
+    if args.conversational:
+        assert isinstance(rag_engine, ConversationalRAG)
+        rag_engine.clear_conversation()
+        print("💭 Conversation history cleared!")
+        return True
+    return False
+
+
+def _process_interactive_question(rag_engine, question, args):
+    '''Process a single question in interactive mode.'''
+    print("🔍 Searching for answer...")
+
+    if args.conversational:
+        assert isinstance(rag_engine, ConversationalRAG)
+        result = rag_engine.conversational_query(
+            question=question,
+            k=args.top_k,
+            include_sources=False,
+            include_scores=False
+        )
+    else:
+        result = rag_engine.query(
+            question=question,
+            k=args.top_k,
+            include_sources=False,
+            include_scores=False
+        )
+
+    print(f"\n💬 Answer: {result.answer}")
+
+    if args.verbose:
+        print(f"\n📊 Retrieved {result.metadata.get('retrieval_count', 0)} relevant documents")
 
 
 def interactive_mode(args):
@@ -136,37 +183,14 @@ def interactive_mode(args):
                 print("👋 Goodbye!")
                 break
 
-            if question.lower() == 'clear' and args.conversational:
-                assert isinstance(rag_engine, ConversationalRAG)
-                rag_engine.clear_conversation()
-                print("💭 Conversation history cleared!")
+            if question.lower() == 'clear':
+                _handle_clear_command(rag_engine, args)
                 continue
 
             if not question:
                 continue
 
-            print("🔍 Searching for answer...")
-
-            if args.conversational:
-                assert isinstance(rag_engine, ConversationalRAG)
-                result = rag_engine.conversational_query(
-                    question=question,
-                    k=args.top_k,
-                    include_sources=False,  # Simplified for interactive mode
-                    include_scores=False
-                )
-            else:
-                result = rag_engine.query(
-                    question=question,
-                    k=args.top_k,
-                    include_sources=False,
-                    include_scores=False
-                )
-
-            print(f"\n💬 Answer: {result.answer}")
-
-            if args.verbose:
-                print(f"\n📊 Retrieved {result.metadata.get('retrieval_count', 0)} relevant documents")
+            _process_interactive_question(rag_engine, question, args)
 
         except KeyboardInterrupt:
             print("\n👋 Goodbye!")

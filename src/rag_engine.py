@@ -108,6 +108,118 @@ Answer:'''
             logger.warning("No documents were successfully processed")
             return 0
 
+    def _retrieve_documents(self, question: str, k: int, include_scores: bool):
+        '''Retrieve documents with optional scores.'''
+        initial_k = min(k * 3, 20)
+
+        if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
+            doc_score_pairs = self.document_index.search_with_scores(question, initial_k)
+            filtered_pairs = self._rerank_and_filter_chunks(question, doc_score_pairs, target_k=k)
+            source_documents = [doc for doc, score in filtered_pairs]
+            confidence_scores = [float(score) for doc, score in filtered_pairs]
+        else:
+            source_documents = self.document_index.search(question, initial_k)
+            source_documents = self._filter_chunks_by_relevance(question, source_documents, target_k=k)
+            confidence_scores = [1.0] * len(source_documents)
+
+        return source_documents, confidence_scores
+
+    def _generate_answer(self, context: str, question: str) -> str:
+        '''Generate answer from context and question.'''
+        prompt = self.prompt_template.format(context=context, question=question)
+        try:
+            answer = self.llm.predict(prompt)
+            logger.info("Successfully generated answer")
+            return answer
+        except Exception as e:
+            logger.error(f"Error generating answer: {e}")
+            return "I encountered an error while generating the answer. Please try again."
+
+    def _apply_coherence_boost(self, question: str, fallback_action, original_k: int,
+                               include_scores: bool):
+        '''Apply k-boost fallback and regenerate answer.'''
+        if not fallback_action.boost_k or not fallback_action.new_k_value:
+            return None, None, None
+
+        if fallback_action.new_k_value <= original_k:
+            return None, None, None
+
+        logger.info(f"Boosting k from {original_k} to {fallback_action.new_k_value}")
+
+        if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
+            boosted_doc_score_pairs = self.document_index.search_with_scores(
+                question, fallback_action.new_k_value)
+            boosted_source_documents = [doc for doc, score in boosted_doc_score_pairs]
+            boosted_confidence_scores = [float(score) for doc, score in boosted_doc_score_pairs]
+        else:
+            boosted_source_documents = self.document_index.search(
+                question, fallback_action.new_k_value)
+            boosted_confidence_scores = [1.0] * len(boosted_source_documents)
+
+        return boosted_source_documents, boosted_confidence_scores, None
+
+    def _apply_coherence_fallbacks(self, question: str, answer: str, source_documents,
+                                  confidence_scores, coherence_metrics, fallback_action,
+                                  original_k: int, include_scores: bool):
+        '''Apply coherence fallback actions.'''
+        if not coherence_metrics.needs_fallback:
+            return answer, source_documents, confidence_scores
+
+        logger.info(f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
+
+        # 1. Boost k if needed
+        boosted_docs, boosted_scores, _ = self._apply_coherence_boost(
+            question, fallback_action, original_k, include_scores)
+
+        if boosted_docs and len(boosted_docs) > len(source_documents):
+            boosted_context = self._prepare_context(boosted_docs)
+            try:
+                boosted_answer = self._generate_answer(boosted_context, question)
+                logger.info("Successfully regenerated answer with boosted retrieval")
+                source_documents = boosted_docs
+                confidence_scores = boosted_scores
+                answer = boosted_answer
+            except Exception as e:
+                logger.error(f"Error regenerating answer with boosted k: {e}")
+
+        # 2. Apply hedging
+        final_answer = answer
+        if fallback_action.hedge_output and self.coherence_validator:
+            final_answer = self.coherence_validator.get_hedged_response(answer, coherence_metrics)
+            logger.debug("Applied hedging to response")
+
+        # 3. Add uncertainty warning
+        if fallback_action.flag_uncertainty and fallback_action.uncertainty_message:
+            final_answer = fallback_action.uncertainty_message + "\n\n" + final_answer
+            logger.debug("Added uncertainty flag to response")
+
+        return final_answer, source_documents, confidence_scores
+
+    def _validate_and_apply_coherence(self, question: str, source_documents, answer: str,
+                                     confidence_scores, original_k: int, include_scores: bool,
+                                     enable_coherence_fallback: bool):
+        '''Validate coherence and apply fallbacks if needed.'''
+        if not (self.enable_coherence_validation and self.coherence_validator and enable_coherence_fallback):
+            return answer, source_documents, confidence_scores, None, None
+
+        try:
+            coherence_metrics, fallback_action = self.coherence_validator.validate_coherence(
+                query=question,
+                retrieved_chunks=source_documents,
+                generated_answer=answer
+            )
+
+            final_answer, source_documents, confidence_scores = self._apply_coherence_fallbacks(
+                question, answer, source_documents, confidence_scores,
+                coherence_metrics, fallback_action, original_k, include_scores
+            )
+
+            return final_answer, source_documents, confidence_scores, coherence_metrics, fallback_action
+
+        except Exception as e:
+            logger.error(f"Error during coherence validation: {e}")
+            return answer, source_documents, confidence_scores, None, None
+
     def query(
         self,
         question: str,
@@ -122,26 +234,8 @@ Answer:'''
         k = k or settings.top_k_results
         original_k = k
 
-        # Enhanced retrieval: Get more candidates initially for better filtering
-        initial_k = min(k * 3, 20)  # Retrieve 3x more for reranking
-
-        # Retrieve relevant documents with scores
-        if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
-            doc_score_pairs = self.document_index.search_with_scores(
-                question, initial_k)
-
-            # Apply intelligent filtering and reranking
-            filtered_pairs = self._rerank_and_filter_chunks(
-                question, doc_score_pairs, target_k=k)
-
-            source_documents = [doc for doc, score in filtered_pairs]
-            confidence_scores = [float(score) for doc, score in filtered_pairs]
-        else:
-            source_documents = self.document_index.search(question, initial_k)
-            # Apply basic filtering even without scores
-            source_documents = self._filter_chunks_by_relevance(
-                question, source_documents, target_k=k)
-            confidence_scores = [1.0] * len(source_documents)
+        # Retrieve documents
+        source_documents, confidence_scores = self._retrieve_documents(question, k, include_scores)
 
         if not source_documents:
             logger.warning("No relevant chunks found for query")
@@ -153,102 +247,22 @@ Answer:'''
                 metadata={"retrieval_count": 0}
             )
 
-        # Prepare context
-        context = self._prepare_context(source_documents)
-
         # Generate answer
-        prompt = self.prompt_template.format(
-            context=context, question=question)
+        context = self._prepare_context(source_documents)
+        answer = self._generate_answer(context, question)
 
-        try:
-            answer = self.llm.predict(prompt)
-            logger.info("Successfully generated answer")
-        except Exception as e:
-            logger.error(f"Error generating answer: {e}")
-            answer = "I encountered an error while generating the answer. Please try again."
-
-        # Validate semantic coherence and apply fallbacks if enabled
-        coherence_metrics = None
-        fallback_action = None
-        final_answer = answer
-
-        if self.enable_coherence_validation and self.coherence_validator and enable_coherence_fallback:
-            try:
-                coherence_metrics, fallback_action = self.coherence_validator.validate_coherence(
-                    query=question,
-                    retrieved_chunks=source_documents,
-                    generated_answer=answer,
-                    chunk_scores=confidence_scores
-                )
-
-                # Apply fallback behaviors
-                if coherence_metrics.needs_fallback:
-                    logger.info(
-                        f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
-
-                    # 1. Boost k if needed and re-retrieve
-                    if fallback_action.boost_k and fallback_action.new_k_value and fallback_action.new_k_value > original_k:
-                        logger.info(
-                            f"Boosting k from {original_k} to {fallback_action.new_k_value}")
-
-                        # Re-retrieve with boosted k
-                        if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
-                            boosted_doc_score_pairs = self.document_index.search_with_scores(
-                                question, fallback_action.new_k_value)
-                            boosted_source_documents = [
-                                doc for doc, score in boosted_doc_score_pairs]
-                            boosted_confidence_scores = [
-                                float(score) for doc, score in boosted_doc_score_pairs]
-                        else:
-                            boosted_source_documents = self.document_index.search(
-                                question, fallback_action.new_k_value)
-                            boosted_confidence_scores = [
-                                1.0] * len(boosted_source_documents)
-
-                        # Re-generate with expanded context if we got more documents
-                        if len(boosted_source_documents) > len(source_documents):
-                            boosted_context = self._prepare_context(
-                                boosted_source_documents)
-                            boosted_prompt = self.prompt_template.format(
-                                context=boosted_context, question=question)
-
-                            try:
-                                boosted_answer = self.llm.predict(
-                                    boosted_prompt)
-                                logger.info(
-                                    "Successfully regenerated answer with boosted retrieval")
-
-                                # Update variables for final result
-                                source_documents = boosted_source_documents
-                                confidence_scores = boosted_confidence_scores
-                                context = boosted_context
-                                answer = boosted_answer
-
-                            except Exception as e:
-                                logger.error(
-                                    f"Error regenerating answer with boosted k: {e}")
-                                # Keep original answer
-
-                    # 2. Apply hedging to output
-                    if fallback_action.hedge_output:
-                        final_answer = self.coherence_validator.get_hedged_response(
-                            answer, coherence_metrics)
-                        logger.debug("Applied hedging to response")
-
-                    # 3. Add uncertainty warning if flagged
-                    if fallback_action.flag_uncertainty and fallback_action.uncertainty_message:
-                        final_answer = fallback_action.uncertainty_message + "\n\n" + final_answer
-                        logger.debug("Added uncertainty flag to response")
-
-            except Exception as e:
-                logger.error(f"Error during coherence validation: {e}")
-                # Continue with original answer if coherence validation fails
+        # Validate coherence and apply fallbacks
+        final_answer, source_documents, confidence_scores, coherence_metrics, fallback_action = \
+            self._validate_and_apply_coherence(
+                question, source_documents, answer, confidence_scores,
+                original_k, include_scores, enable_coherence_fallback
+            )
 
         # Prepare metadata
         metadata = {
             "retrieval_count": len(source_documents),
             "context_length": len(context),
-            "prompt_length": len(prompt),
+            "prompt_length": len(self.prompt_template.format(context=context, question=question)),
             "model_used": settings.chat_model,
             "original_k": original_k,
             "final_k": len(source_documents),
@@ -264,18 +278,15 @@ Answer:'''
                 "query_generation_cosine": coherence_metrics.query_generation_cosine
             })
 
-        result = QueryResult(
+        return QueryResult(
             query=question,
             answer=final_answer,
             source_documents=source_documents if include_sources else [],
-            confidence_scores=confidence_scores if include_scores else [],
+            confidence_scores=confidence_scores if include_scores and confidence_scores is not None else [],
             metadata=metadata,
             coherence_metrics=coherence_metrics,
             fallback_action=fallback_action
         )
-
-        return result
-
     def _rerank_and_filter_chunks(
         self,
         question: str,

@@ -11,6 +11,9 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+# Constants
+MANAGE_PY = 'manage.py'
+
 
 def main():
     """Main entry point with command routing."""
@@ -123,9 +126,9 @@ def start_django(host="127.0.0.1", port=8000, with_setup=False):
     if with_setup:
         print("🔧 Running Django migrations and collecting static files...")
         try:
-            execute_from_command_line(['manage.py', 'makemigrations'])
-            execute_from_command_line(['manage.py', 'migrate'])
-            execute_from_command_line(['manage.py', 'collectstatic', '--noinput'])
+            execute_from_command_line([MANAGE_PY, 'makemigrations'])
+            execute_from_command_line([MANAGE_PY, 'migrate'])
+            execute_from_command_line([MANAGE_PY, 'collectstatic', '--noinput'])
         except Exception as setup_error:
             print(f"⚠️ Setup warning: {setup_error}")
 
@@ -134,7 +137,7 @@ def start_django(host="127.0.0.1", port=8000, with_setup=False):
     print("Press Ctrl+C to stop the server")
     try:
         execute_from_command_line([
-            'manage.py', 'runserver', f'{host}:{port}'
+            MANAGE_PY, 'runserver', f'{host}:{port}'
         ])
     except KeyboardInterrupt:
         print("\n🛑 Server stopped")

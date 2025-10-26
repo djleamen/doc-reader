@@ -3,12 +3,12 @@ FROM python:3.14-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (sorted alphanumerically)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    libmagic1 \
     libmagic-dev \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -27,11 +27,9 @@ RUN mkdir -p documents indexes logs temp backups media staticfiles
 # Set Django settings module
 ENV DJANGO_SETTINGS_MODULE=django_app.settings
 
-# Collect static files for Django
-RUN python manage.py collectstatic --noinput || true
-
-# Create non-root user for security
-RUN useradd -m -u 1000 raguser && \
+# Collect static files for Django and create non-root user for security
+RUN python manage.py collectstatic --noinput || true && \
+    useradd -m -u 1000 raguser && \
     chown -R raguser:raguser /app
 
 # Switch to non-root user

@@ -108,8 +108,7 @@ class SemanticCoherenceValidator:
         self,
         query: str,
         retrieved_chunks: List[Document],
-        generated_answer: str,
-        chunk_scores: Optional[List[float]] = None
+        generated_answer: str
     ) -> Tuple[CoherenceMetrics, FallbackAction]:
         '''Validate semantic coherence across the RAG pipeline.'''
         logger.debug(f"Validating coherence for query: {query[:50]}...")

@@ -125,15 +125,10 @@
                 
                 <!-- Upload Progress -->
                 <div id="uploadProgress" class="mt-3 hidden">
-                    <div class="progress">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated" 
-                             role="progressbar" 
-                             aria-label="Document upload progress"
-                             aria-valuenow="0" 
-                             aria-valuemin="0" 
-                             aria-valuemax="100"
-                             class="progress-bar-initial"></div>
-                    </div>
+                    <progress class="progress-bar progress-bar-striped progress-bar-animated w-100" 
+                             value="0" 
+                             max="100"
+                             aria-label="Document upload progress"></progress>
                     <div class="text-center text-white mt-2">
                         <span id="uploadStatus">Processing...</span>
                     </div>
@@ -160,18 +155,18 @@
                 </h6>
                 
                 <div class="collapse" id="sampleQuestions">
-                    <div class="sample-question" onclick="setQuestion(this)">
+                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
                         What are the main topics covered in the documents?
-                    </div>
-                    <div class="sample-question" onclick="setQuestion(this)">
+                    </button>
+                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
                         Can you summarize the key findings?
-                    </div>
-                    <div class="sample-question" onclick="setQuestion(this)">
+                    </button>
+                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
                         What methodology was used in the research?
-                    </div>
-                    <div class="sample-question" onclick="setQuestion(this)">
+                    </button>
+                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
                         What are the conclusions and recommendations?
-                    </div>
+                    </button>
                 </div>
             </div>
             
@@ -193,7 +188,7 @@
             
             <!-- Query Progress -->
             <div id="queryProgress" class="text-center mt-3 hidden">
-                <div class="spinner-border" role="status"></div>
+                <output class="spinner-border" role="status"></output>
                 <div class="text-white mt-2">Searching for answers...</div>
             </div>
         </div>
@@ -337,25 +332,25 @@ $(document).ready(function() {
         let fileList = $('#fileList');
         fileList.empty();
         
-        selectedFiles.forEach((file, index) => {
+        for (const [index, file] of selectedFiles.entries()) {
             let listItem = $(`
                 <li class="list-group-item d-flex justify-content-between align-items-center file-list-item">
                     <span>
                         <i class="fas fa-file"></i> ${file.name} 
                         <small>(${(file.size / 1024 / 1024).toFixed(2)} MB)</small>
                     </span>
-                    <button class="btn btn-sm btn-outline-danger" onclick="removeFile(${index})" title="Remove file">
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeFile(${index})" title="Remove file" type="button">
                         <i class="fas fa-times"></i>
                     </button>
                 </li>
             `);
             fileList.append(listItem);
-        });
+        }
         
         $('#selectedFiles').show();
     }
     
-    window.removeFile = function(index) {
+    globalThis.removeFile = function(index) {
         selectedFiles.splice(index, 1);
         if (selectedFiles.length > 0) {
             displaySelectedFiles();
@@ -371,9 +366,9 @@ $(document).ready(function() {
         let formData = new FormData();
         formData.append('index_name', currentIndexName);
         
-        selectedFiles.forEach(file => {
+        for (const file of selectedFiles) {
             formData.append('files', file);
-        });
+        }
         
         // Add CSRF token
         formData.append('csrfmiddlewaretoken', $('[name=csrfmiddlewaretoken]').val());
@@ -388,7 +383,7 @@ $(document).ready(function() {
             processData: false,
             contentType: false,
             xhr: function() {
-                let xhr = new window.XMLHttpRequest();
+                let xhr = new globalThis.XMLHttpRequest();
                 xhr.upload.addEventListener("progress", function(evt) {
                     if (evt.lengthComputable) {
                         let percentComplete = evt.loaded / evt.total * 100;
@@ -482,12 +477,12 @@ $(document).ready(function() {
         e.preventDefault();
         
         let question = $('#questionInput').val().trim();
-        if (!question) return;
+        if (question === '') return;
         
         let requestData = {
             question: question,
             index_name: currentIndexName,
-            k: parseInt($('#maxResults').val()),
+            k: Number.parseInt($('#maxResults').val(), 10),
             include_sources: $('#includeSources').is(':checked'),
             include_scores: $('#includeScores').is(':checked')
         };
@@ -533,7 +528,7 @@ $(document).ready(function() {
     
     function displayQueryResults(response) {
         // Answer
-        $('#answerContent').html(response.answer.replace(/\n/g, '<br>'));
+        $('#answerContent').html(response.answer.replaceAll(/\n/g, '<br>'));
         
         // Metadata
         let metrics = '';
@@ -570,7 +565,7 @@ $(document).ready(function() {
         // Source documents
         if (response.source_documents && response.source_documents.length > 0) {
             let sourcesHtml = '';
-            response.source_documents.forEach((doc, index) => {
+            for (const [index, doc] of response.source_documents.entries()) {
                 let score = response.confidence_scores ? 
                            response.confidence_scores[index] : null;
                 
@@ -586,7 +581,7 @@ $(document).ready(function() {
                         </h6>
                         <div id="source${index}" class="collapse">
                             <div class="source-doc">
-                                <div class="mb-3">${doc.content.replace(/\n/g, '<br>')}</div>
+                                <div class="mb-3">${doc.content.replaceAll(/\n/g, '<br>')}</div>
                                 ${Object.keys(doc.metadata).length > 0 ? 
                                   '<strong>Metadata:</strong><br>' + 
                                   Object.entries(doc.metadata).map(([k,v]) => `<strong>${k}:</strong> ${v}`).join('<br>') : ''}
@@ -594,7 +589,7 @@ $(document).ready(function() {
                         </div>
                     </div>
                 `;
-            });
+            }
             $('#sourceList').html(sourcesHtml);
             $('#sourceDocuments').show();
         } else {
@@ -686,7 +681,7 @@ $(document).ready(function() {
     }
     
     // Sample question handler
-    window.setQuestion = function(element) {
+    globalThis.setQuestion = function(element) {
         $('#questionInput').val($(element).text().trim());
     }
     

@@ -5,7 +5,7 @@
 echo "Starting RAG Document Q&A System..."
 
 # Check if virtual environment exists and activate it
-if [ -d "venv" ]; then
+if [[ -d "venv" ]]; then
     echo "Using virtual environment..."
     source venv/bin/activate
     PYTHON_CMD="venv/bin/python"
