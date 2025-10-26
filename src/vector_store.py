@@ -18,6 +18,7 @@ from loguru import logger
 
 from src.config import settings
 
+NOT_INITIALIZED = "Vector store not initialized. Add documents first."
 
 class LocalEmbeddings(Embeddings):
     '''Local embeddings using sentence-transformers.'''
@@ -100,7 +101,7 @@ class FAISSVectorStore(VectorStoreManager):
         '''Search for similar documents using FAISS.'''
         if self.vector_store is None:
             raise ValueError(
-                "Vector store not initialized. Add documents first.")
+                NOT_INITIALIZED)
 
         k = k or settings.top_k_results
         results = self.vector_store.similarity_search(query, k=k)
@@ -112,7 +113,7 @@ class FAISSVectorStore(VectorStoreManager):
         '''Search with similarity scores.'''
         if self.vector_store is None:
             raise ValueError(
-                "Vector store not initialized. Add documents first.")
+                NOT_INITIALIZED)
 
         k = k or settings.top_k_results
         results = self.vector_store.similarity_search_with_score(query, k=k)
@@ -210,7 +211,7 @@ class ChromaVectorStore(VectorStoreManager):
         '''Search for similar documents using Chroma.'''
         if self.vector_store is None:
             raise ValueError(
-                "Vector store not initialized. Add documents first.")
+                NOT_INITIALIZED)
 
         k = k or settings.top_k_results
         results = self.vector_store.similarity_search(query, k=k)
@@ -306,3 +307,17 @@ class DocumentIndex:
     def load_index(self) -> None:
         '''Load the index from disk.'''
         self.vector_store.load(str(self.index_path))
+
+    def clear_index(self) -> None:
+        '''Clear all documents from the index and delete the index files.'''
+        import shutil
+        # Reset the vector store
+        self.vector_store = VectorStoreFactory.create_vector_store()
+        # Delete the index directory if it exists
+        if self.index_path.exists():
+            try:
+                shutil.rmtree(self.index_path)
+                logger.info(f"Cleared index at {self.index_path}")
+            except Exception as e:
+                logger.error(f"Error clearing index directory: {e}")
+                raise

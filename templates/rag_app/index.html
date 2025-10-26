@@ -12,9 +12,10 @@
             <div class="mb-3">
                 <label for="indexSelect" class="form-label text-white">Index Name</label>
                 <select class="form-select" id="indexSelect">
-                    <option value="default" selected>default</option>
                     {% for index in indexes %}
-                        <option value="{{ index.name }}">{{ index.name }}</option>
+                        <option value="{{ index.name }}" {% if index.name == 'default' %}selected{% endif %}>{{ index.name }}</option>
+                    {% empty %}
+                        <option value="default" selected>default</option>
                     {% endfor %}
                 </select>
                 <small class="text-white-50">Select or create document index</small>
@@ -26,7 +27,7 @@
             <div class="mb-3">
                 <label for="maxResults" class="form-label text-white">Max Results</label>
                 <input type="range" class="form-range" id="maxResults" min="1" max="20" value="5">
-                <small class="text-white-50">Max documents to retrieve: <span id="maxResultsValue">5</span></small>
+                <small class="text-white-50">Max chunks to retrieve: <span id="maxResultsValue">5</span></small>
             </div>
             
             <div class="form-check mb-2">
@@ -69,10 +70,17 @@
                 </div>
             </div>
             
+            <!-- Document Management -->
+            <div class="mt-4">
+                <button class="btn btn-danger btn-sm w-100" id="clearDocuments" title="Clear all documents and chunks from this index">
+                    <i class="fas fa-trash-alt"></i> Clear All Documents
+                </button>
+            </div>
+            
             <!-- Clear Conversation -->
-            <div id="conversationalControls" class="mt-4 hidden">
+            <div id="conversationalControls" class="mt-3 hidden">
                 <button class="btn btn-warning btn-sm w-100" id="clearConversation">
-                    <i class="fas fa-trash"></i> Clear Conversation
+                    <i class="fas fa-comments"></i> Clear Conversation
                 </button>
             </div>
         </div>
@@ -219,7 +227,7 @@
             
             <!-- Source Documents -->
             <div id="sourceDocuments" class="glass-card hidden">
-                <h5 class="text-white"><i class="fas fa-book"></i> Source Documents</h5>
+                <h5 class="text-white"><i class="fas fa-book"></i> Source Chunks</h5>
                 <div id="sourceList">
                     <!-- Source documents will be populated by JavaScript -->
                 </div>
@@ -265,8 +273,11 @@ $(document).ready(function() {
     
     function initializeEventListeners() {
         // File input handling
-        $('#dragDropArea, #fileInput').on('click', function() {
-            $('#fileInput').click();
+        $('#dragDropArea').on('click', function(e) {
+            // Only trigger file input if not already clicking on the input itself
+            if (e.target.id !== 'fileInput') {
+                $('#fileInput').click();
+            }
         });
         
         $('#fileInput').on('change', handleFileSelection);
@@ -309,6 +320,7 @@ $(document).ready(function() {
         // Actions
         $('#refreshStats').on('click', loadIndexStats);
         $('#clearConversation').on('click', clearConversation);
+        $('#clearDocuments').on('click', clearAllDocuments);
     }
     
     function handleFileSelection(e) {
@@ -568,7 +580,7 @@ $(document).ready(function() {
                             <button class="btn w-100 text-start text-white" type="button" 
                                     data-bs-toggle="collapse" data-bs-target="#source${index}">
                                 <i class="fas fa-file-alt"></i> 
-                                Source ${index + 1} - ${doc.metadata.filename || 'Unknown'}
+                                Chunk ${index + 1} - ${doc.metadata.filename || 'Unknown'}
                                 ${score !== null ? `<span class="confidence-score float-end">Score: ${score.toFixed(4)}</span>` : ''}
                             </button>
                         </h6>
@@ -638,6 +650,37 @@ $(document).ready(function() {
             },
             error: function() {
                 alert('Failed to clear conversation');
+            }
+        });
+    }
+    
+    function clearAllDocuments() {
+        if (!confirm(`⚠️ WARNING: This will permanently delete all documents and chunks from the "${currentIndexName}" index.\n\nThis action cannot be undone. Are you sure you want to continue?`)) {
+            return;
+        }
+        
+        // Show loading indicator
+        $('#clearDocuments').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
+        
+        $.ajax({
+            url: '/api/clear-documents/',
+            type: 'DELETE',
+            data: { index_name: currentIndexName },
+            headers: {
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: function(response) {
+                alert(response.message || 'All documents cleared successfully!');
+                loadIndexStats();
+                $('#resultsSection').hide();
+                conversationHistory = [];
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON?.error || 'Failed to clear documents';
+                alert('Error: ' + errorMsg);
+            },
+            complete: function() {
+                $('#clearDocuments').prop('disabled', false).html('<i class="fas fa-trash-alt"></i> Clear All Documents');
             }
         });
     }

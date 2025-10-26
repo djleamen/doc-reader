@@ -15,6 +15,8 @@ api_urlpatterns = [
     path('index-stats/', views.index_stats, name='api-index-stats'),
     path('conversation/', views.clear_conversation,
          name='api-clear-conversation'),
+    path('clear-documents/', views.clear_documents,
+         name='api-clear-documents'),
     path('health/', views.health_check, name='api-health'),
 ]
 

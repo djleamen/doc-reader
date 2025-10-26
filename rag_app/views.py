@@ -273,7 +273,11 @@ class ConversationalQueryView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             index_name = data.get('index_name', 'default')
-            session_key = request.session.session_key or request.session.create()
+            
+            # Ensure session exists and has a key
+            if not request.session.session_key:
+                request.session.create()
+            session_key = request.session.session_key
 
             # Get or create session
             try:
@@ -361,8 +365,8 @@ def index_stats(request):
                 'recent_queries': [
                     {
                         'question': (query.question[:100] + '...'
-                                   if len(query.question) > 100
-                                   else query.question),
+                                     if len(query.question) > 100
+                                     else query.question),
                         'created_at': query.created_at.isoformat(),
                         'response_time': query.response_time
                     } for query in recent_queries
@@ -403,6 +407,55 @@ def clear_conversation(request):
         logger.error("Failed to clear conversation", exc_info=True)
         return Response({
             'error': 'An internal server error occurred.'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['DELETE'])
+def clear_documents(request):
+    '''Clear all documents from an index.'''
+    logger_instance = logging.getLogger(__name__)
+    try:
+        index_name = request.query_params.get(
+            'index_name') or request.data.get('index_name', 'default')
+
+        # Get the index
+        try:
+            index = DocumentIndex.objects.get(name=index_name)
+        except DocumentIndex.DoesNotExist:
+            return Response({
+                'error': f'Index "{index_name}" not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Clear the RAG engine and vector store
+        rag_engine = get_rag_engine(index_name)
+        rag_engine.clear_index()
+
+        # Clear RAG engine cache
+        if index_name in _rag_engines:
+            del _rag_engines[index_name]
+        if index_name in _conversational_rags:
+            del _conversational_rags[index_name]
+
+        # Delete all documents from database
+        Document.objects.filter(index=index).delete()
+
+        # Update index stats
+        index.document_count = 0
+        index.chunk_count = 0
+        index.save()
+
+        logger_instance.info(
+            "Cleared all documents from index '%s'", index_name)
+
+        return Response({
+            'message': f'Successfully cleared all documents from index "{index_name}"',
+            'index_name': index_name
+        })
+
+    except (OSError, IOError, ValueError, RuntimeError) as e:
+        logger_instance.error("Failed to clear documents", exc_info=True)
+        return Response({
+            'error': f'Failed to clear documents: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 

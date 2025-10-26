@@ -58,21 +58,23 @@ class RAGEngine:
 
     def _create_prompt_template(self) -> PromptTemplate:
         '''Create the prompt template for Q&A.'''
-        template = '''You are a helpful AI assistant that answers questions based on the provided document context.
+        template = '''You are a helpful AI assistant that answers questions based on the provided context chunks from documents.
 Use only the information from the context to answer questions. If the context doesn't contain enough information
 to answer the question, say so clearly.
 
-Context from documents:
+Note: The context below consists of relevant text chunks (segments) extracted from larger documents.
+
+Context chunks:
 {context}
 
 Question: {question}
 
 Instructions:
-1. Answer based only on the provided context
+1. Answer based only on the provided context chunks
 2. Be specific and cite relevant parts of the context
 3. If the context is insufficient, state this clearly
 4. Provide a comprehensive answer when possible
-5. If there are multiple relevant pieces of information, synthesize them
+5. If there are multiple relevant chunks, synthesize them
 6. Respond in paragraph format, avoid using markdown
 
 Answer:'''
@@ -120,22 +122,32 @@ Answer:'''
         k = k or settings.top_k_results
         original_k = k
 
-        # Retrieve relevant documents
+        # Enhanced retrieval: Get more candidates initially for better filtering
+        initial_k = min(k * 3, 20)  # Retrieve 3x more for reranking
+
+        # Retrieve relevant documents with scores
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
             doc_score_pairs = self.document_index.search_with_scores(
-                question, k)
-            source_documents = [doc for doc, score in doc_score_pairs]
-            confidence_scores = [float(score)
-                                 for doc, score in doc_score_pairs]
+                question, initial_k)
+
+            # Apply intelligent filtering and reranking
+            filtered_pairs = self._rerank_and_filter_chunks(
+                question, doc_score_pairs, target_k=k)
+
+            source_documents = [doc for doc, score in filtered_pairs]
+            confidence_scores = [float(score) for doc, score in filtered_pairs]
         else:
-            source_documents = self.document_index.search(question, k)
+            source_documents = self.document_index.search(question, initial_k)
+            # Apply basic filtering even without scores
+            source_documents = self._filter_chunks_by_relevance(
+                question, source_documents, target_k=k)
             confidence_scores = [1.0] * len(source_documents)
 
         if not source_documents:
-            logger.warning("No relevant documents found for query")
+            logger.warning("No relevant chunks found for query")
             return QueryResult(
                 query=question,
-                answer="I couldn't find any relevant information in the documents to answer your question.",
+                answer="I couldn't find any relevant information in the document chunks to answer your question.",
                 source_documents=[],
                 confidence_scores=[],
                 metadata={"retrieval_count": 0}
@@ -264,6 +276,130 @@ Answer:'''
 
         return result
 
+    def _rerank_and_filter_chunks(
+        self,
+        question: str,
+        doc_score_pairs: List[tuple],
+        target_k: int
+    ) -> List[tuple]:
+        '''Rerank and filter chunks using multiple criteria.'''
+        if not doc_score_pairs:
+            return []
+
+        # Extract unique keywords from question for relevance scoring
+        question_lower = question.lower()
+        question_words = set(question_lower.split())
+
+        # Remove common stop words
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at',
+                      'to', 'for', 'of', 'with', 'is', 'are', 'was', 'were',
+                      'what', 'when', 'where', 'who', 'why', 'how', 'which'}
+        question_keywords = question_words - stop_words
+
+        # Calculate enhanced scores for each chunk
+        scored_chunks = []
+        for doc, similarity_score in doc_score_pairs:
+            content_lower = doc.page_content.lower()
+
+            # Factor 1: Original similarity score (normalized)
+            sim_score = float(similarity_score)
+
+            # Factor 2: Keyword overlap bonus
+            content_words = set(content_lower.split())
+            keyword_matches = len(question_keywords & content_words)
+            keyword_score = min(
+                keyword_matches / max(len(question_keywords), 1), 1.0)
+
+            # Factor 3: Content length penalty (prefer substantial chunks)
+            content_length = len(doc.page_content)
+            if content_length < 100:
+                length_penalty = 0.8  # Short chunks are less likely to be comprehensive
+            elif content_length > 2000:
+                length_penalty = 0.9  # Very long chunks might be too general
+            else:
+                length_penalty = 1.0
+
+            # Factor 4: Diversity bonus (prefer chunks from different sources)
+            # This will be applied in a second pass
+
+            # Combined score
+            combined_score = (
+                sim_score * 0.6 +           # Similarity is most important
+                keyword_score * 0.3 +       # Keyword overlap is valuable
+                length_penalty * 0.1        # Length consideration
+            )
+
+            scored_chunks.append(
+                (doc, combined_score, doc.metadata.get('source', 'unknown')))
+
+        # Sort by combined score
+        scored_chunks.sort(key=lambda x: x[1], reverse=True)
+
+        # Apply diversity: Try to get chunks from different sources
+        selected_chunks = []
+        source_counts = {}
+
+        # First pass: Select top chunks with source diversity
+        for doc, score, source in scored_chunks:
+            if len(selected_chunks) >= target_k:
+                break
+
+            # Prefer variety, but allow up to 3 chunks from same source
+            if source_counts.get(source, 0) < 3 or len(selected_chunks) < target_k // 2:
+                selected_chunks.append((doc, score))
+                source_counts[source] = source_counts.get(source, 0) + 1
+
+        # If we don't have enough, add remaining high-scoring chunks
+        if len(selected_chunks) < target_k:
+            for doc, score, source in scored_chunks:
+                if len(selected_chunks) >= target_k:
+                    break
+                if not any(d.page_content == doc.page_content for d, _ in selected_chunks):
+                    selected_chunks.append((doc, score))
+
+        logger.info(
+            f"Reranked {len(doc_score_pairs)} chunks to {len(selected_chunks)} using enhanced scoring")
+
+        return selected_chunks[:target_k]
+
+    def _filter_chunks_by_relevance(
+        self,
+        question: str,
+        documents: List[Document],
+        target_k: int
+    ) -> List[Document]:
+        '''Filter chunks by relevance when scores aren't available.'''
+        if not documents:
+            return []
+
+        question_lower = question.lower()
+        question_words = set(question_lower.split())
+
+        # Calculate relevance scores
+        scored_docs = []
+        for doc in documents:
+            content_lower = doc.page_content.lower()
+
+            # Count keyword matches
+            content_words = set(content_lower.split())
+            matches = len(question_words & content_words)
+
+            # Normalize by question length
+            relevance_score = matches / max(len(question_words), 1)
+
+            scored_docs.append((doc, relevance_score))
+
+        # Sort by relevance
+        scored_docs.sort(key=lambda x: x[1], reverse=True)
+
+        # Return top k
+        filtered = [doc for doc, _ in scored_docs[:target_k]]
+
+        logger.info(
+            f"Filtered {len(documents)} chunks to {len(filtered)} based on relevance")
+
+        return filtered
+
     def _prepare_context(self, documents: List[Document]) -> str:
         '''Prepare context string from retrieved documents.'''
         context_parts = []
@@ -314,9 +450,9 @@ Answer:'''
         }
 
     def clear_index(self) -> None:
-        '''Clear the document index.'''
-        self.document_index = DocumentIndex(self.index_name)
-        logger.info("Document index cleared")
+        '''Clear the document index and delete all documents/chunks.'''
+        self.document_index.clear_index()
+        logger.info(f"Document index '{self.index_name}' cleared completely")
 
 
 class ConversationalRAG(RAGEngine):
