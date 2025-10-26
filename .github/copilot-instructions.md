@@ -222,12 +222,17 @@ results = index.similarity_search(query, k=5)
 ### Running Tests
 The project uses pytest for testing Django models, views, and API endpoints.
 
-**Note**: To run Django tests with pytest, ensure `pytest-django` is installed:
+**Note**: To run Django tests with pytest, `pytest-django` is required but not yet in `requirements.txt`. 
+Consider adding it to the project dependencies:
 ```bash
+# Temporary installation for testing:
 pip install pytest-django
+
+# Or add to requirements.txt for permanent setup:
+# pytest-django>=4.5.0
 ```
 
-Then add a `pytest.ini` file in the project root if not present:
+Once pytest-django is available, add a `pytest.ini` file in the project root if not present:
 ```ini
 [pytest]
 DJANGO_SETTINGS_MODULE = django_app.settings
