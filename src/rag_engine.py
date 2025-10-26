@@ -46,7 +46,6 @@ class RAGEngine:
 
         # Initialize LLM
         self.llm = ChatOpenAI(
-            api_key=settings.openai_api_key,
             model=settings.chat_model,
             temperature=settings.temperature,
             max_tokens=settings.max_tokens
@@ -83,7 +82,7 @@ Answer:'''
             input_variables=["context", "question"]
         )
 
-    def add_documents(self, file_paths: List[str], metadata: Dict[str, Any] = None) -> int:
+    def add_documents(self, file_paths: List[str], metadata: Optional[Dict[str, Any]] = None) -> int:
         '''Add documents to the RAG system.'''
         all_documents = []
 
@@ -110,7 +109,7 @@ Answer:'''
     def query(
         self,
         question: str,
-        k: int = None,
+        k: Optional[int] = None,
         include_sources: bool = True,
         include_scores: bool = True,
         enable_coherence_fallback: bool = True

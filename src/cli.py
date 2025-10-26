@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 import json
+from typing import Union
 
 from loguru import logger
 from src.config import settings
@@ -56,6 +57,7 @@ def query_command(args):
     '''Query the RAG system.'''
     logger.info(f"Querying index: {args.index_name}")
 
+    rag_engine: Union[RAGEngine, ConversationalRAG]
     if args.conversational:
         rag_engine = ConversationalRAG(args.index_name)
     else:
@@ -63,6 +65,8 @@ def query_command(args):
 
     try:
         if args.conversational:
+            # Type narrowing: rag_engine is ConversationalRAG here
+            assert isinstance(rag_engine, ConversationalRAG)
             result = rag_engine.conversational_query(
                 question=args.question,
                 k=args.top_k,
@@ -133,6 +137,7 @@ def interactive_mode(args):
                 break
 
             if question.lower() == 'clear' and args.conversational:
+                assert isinstance(rag_engine, ConversationalRAG)
                 rag_engine.clear_conversation()
                 print("💭 Conversation history cleared!")
                 continue
@@ -143,6 +148,7 @@ def interactive_mode(args):
             print("🔍 Searching for answer...")
 
             if args.conversational:
+                assert isinstance(rag_engine, ConversationalRAG)
                 result = rag_engine.conversational_query(
                     question=question,
                     k=args.top_k,

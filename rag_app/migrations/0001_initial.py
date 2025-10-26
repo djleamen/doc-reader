@@ -18,7 +18,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='DocumentIndex',
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(default=uuid.uuid4,
+                 editable=False, primary_key=True, serialize=False)),
                 ('name', models.CharField(max_length=255, unique=True)),
                 ('description', models.TextField(blank=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
@@ -33,7 +34,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Document',
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(default=uuid.uuid4,
+                 editable=False, primary_key=True, serialize=False)),
                 ('filename', models.CharField(max_length=500)),
                 ('original_filename', models.CharField(max_length=500)),
                 ('file_path', models.CharField(max_length=1000)),
@@ -43,7 +45,8 @@ class Migration(migrations.Migration):
                 ('processed', models.BooleanField(default=False)),
                 ('chunk_count', models.IntegerField(default=0)),
                 ('processing_error', models.TextField(blank=True)),
-                ('index', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='documents', to='rag_app.documentindex')),
+                ('index', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE,
+                 related_name='documents', to='rag_app.documentindex')),
             ],
             options={
                 'ordering': ['-uploaded_at'],
@@ -52,12 +55,15 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='QuerySession',
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(default=uuid.uuid4,
+                 editable=False, primary_key=True, serialize=False)),
                 ('session_key', models.CharField(db_index=True, max_length=255)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('index', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='rag_app.documentindex')),
-                ('user', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                ('index', models.ForeignKey(
+                    on_delete=django.db.models.deletion.CASCADE, to='rag_app.documentindex')),
+                ('user', models.ForeignKey(blank=True, null=True,
+                 on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
             ],
             options={
                 'ordering': ['-updated_at'],
@@ -66,7 +72,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Query',
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(default=uuid.uuid4,
+                 editable=False, primary_key=True, serialize=False)),
                 ('question', models.TextField()),
                 ('answer', models.TextField()),
                 ('k_results', models.IntegerField(default=5)),
@@ -77,8 +84,10 @@ class Migration(migrations.Migration):
                 ('context_length', models.IntegerField(default=0)),
                 ('retrieval_count', models.IntegerField(default=0)),
                 ('model_used', models.CharField(blank=True, max_length=100)),
-                ('index', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='rag_app.documentindex')),
-                ('session', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='queries', to='rag_app.querysession')),
+                ('index', models.ForeignKey(
+                    on_delete=django.db.models.deletion.CASCADE, to='rag_app.documentindex')),
+                ('session', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE,
+                 related_name='queries', to='rag_app.querysession')),
             ],
             options={
                 'ordering': ['-created_at'],

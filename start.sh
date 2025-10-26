@@ -2,11 +2,11 @@
 # Start script for the RAG Document Q&A system
 # This is a simple wrapper around the main.py entry point
 
-echo "🚀 Starting RAG Document Q&A System..."
+echo "Starting RAG Document Q&A System..."
 
 # Check if virtual environment exists and activate it
 if [ -d "venv" ]; then
-    echo "📦 Using virtual environment..."
+    echo "Using virtual environment..."
     source venv/bin/activate
     PYTHON_CMD="venv/bin/python"
 else

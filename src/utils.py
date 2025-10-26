@@ -2,11 +2,10 @@
 Utility functions for the RAG Document Q&A system.
 """
 
-import os
 import hashlib
 import mimetypes
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import time
 
 def get_file_hash(file_path: str) -> str:
@@ -46,11 +45,12 @@ def format_file_size(size_bytes: int) -> str:
 
     size_names = ["B", "KB", "MB", "GB", "TB"]
     i = 0
-    while size_bytes >= 1024 and i < len(size_names) - 1:
-        size_bytes /= 1024.0
+    size_float = float(size_bytes)
+    while size_float >= 1024 and i < len(size_names) - 1:
+        size_float /= 1024.0
         i += 1
 
-    return f"{size_bytes:.1f} {size_names[i]}"
+    return f"{size_float:.1f} {size_names[i]}"
 
 
 def validate_document_format(file_path: str, supported_formats: List[str]) -> bool:
@@ -164,12 +164,12 @@ def backup_index(index_name: str, backup_dir: str = "backups") -> str:
     if not source_path.exists():
         raise FileNotFoundError(f"Index not found: {index_name}")
 
-    backup_dir = Path(backup_dir)
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_dir_path = Path(backup_dir)
+    backup_dir_path.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_name = f"{index_name}_backup_{timestamp}"
-    backup_path = backup_dir / backup_name
+    backup_path = backup_dir_path / backup_name
 
     shutil.copytree(source_path, backup_path)
 
@@ -196,9 +196,9 @@ def restore_index(backup_path: str, index_name: str) -> None:
 def get_system_info() -> Dict[str, Any]:
     '''Get system information for debugging.'''
     import platform
-    import psutil
 
     try:
+        import psutil
         cpu_count = psutil.cpu_count()
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')

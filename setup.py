@@ -10,7 +10,7 @@ from pathlib import Path
 
 def run_command(command, description):
     """Run a shell command and handle errors."""
-    print(f"🔧 {description}...")
+    print(f"{description}...")
     try:
         subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
         return True
@@ -27,13 +27,13 @@ def check_python_version():
     if version.major < 3 or (version.major == 3 and version.minor < 8):
         print("❌ Python 3.8 or higher is required")
         return False
-    print(f"✅ Python {version.major}.{version.minor}.{version.micro} detected")
+    print(f"Python {version.major}.{version.minor}.{version.micro} detected")
     return True
 
 
 def setup_environment():
     """Set up the development environment."""
-    print("🚀 Setting up RAG Document Q&A System...")
+    print("Setting up RAG Document Q&A System...")
 
     # Check Python version
     if not check_python_version():
@@ -44,7 +44,7 @@ def setup_environment():
         if not run_command(f"{sys.executable} -m venv venv", "Creating virtual environment"):
             return False
     else:
-        print("✅ Virtual environment already exists")
+        print("Virtual environment already exists")
 
     # Determine activation command based on OS
     if os.name == 'nt':  # Windows
@@ -60,7 +60,7 @@ def setup_environment():
     directories = ["documents", "indexes", "logs", "temp", "backups", "media", "staticfiles"]
     for directory in directories:
         Path(directory).mkdir(exist_ok=True)
-    print("✅ Created necessary directories")
+    print("Created necessary directories")
 
     # Copy .env.example to .env if it doesn't exist
     env_file = Path(".env")
@@ -72,10 +72,10 @@ def setup_environment():
             print("❌ .env.example file not found")
             return False
     else:
-        print("✅ .env file already exists")
+        print(".env file already exists")
 
-    print("\n🎉 Setup completed successfully!")
-    print("\n📖 Quick start guide:")
+    print("\nSetup completed successfully!")
+    print("\nQuick start guide:")
     print("1. Edit .env file with your OpenAI API key")
     print("2. Run: python main.py start")
     print("3. Open: http://localhost:8000")

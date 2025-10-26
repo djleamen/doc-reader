@@ -77,12 +77,11 @@ class SemanticCoherenceValidator:
 
     def __init__(
         self,
-        coherence_thresholds: Dict[str, float] = None,
-        fallback_config: Dict[str, Any] = None
+        coherence_thresholds: Optional[Dict[str, float]] = None,
+        fallback_config: Optional[Dict[str, Any]] = None
     ):
         '''Initialize the semantic coherence validator.'''
         self.embeddings = OpenAIEmbeddings(
-            api_key=settings.openai_api_key,
             model=settings.embedding_model
         )
 
@@ -134,7 +133,7 @@ class SemanticCoherenceValidator:
         # Calculate coherence metrics
         metrics = self._calculate_coherence_metrics(
             query_chunk_similarities,
-            chunk_answer_similarities, 
+            chunk_answer_similarities,
             query_answer_similarity,
             len(retrieved_chunks)
         )
@@ -173,7 +172,7 @@ class SemanticCoherenceValidator:
 
     def _calculate_similarities(
         self,
-        query_embedding: np.ndarray, 
+        query_embedding: np.ndarray,
         chunk_embeddings: List[np.ndarray]
     ) -> List[float]:
         '''Calculate cosine similarities between query and chunks.'''
@@ -229,25 +228,25 @@ class SemanticCoherenceValidator:
         coherence_delta = max(query_chunk_delta, chunk_generation_delta, query_generation_delta)
 
         # Determine coherence level
-        coherence_level = self._determine_coherence_level(coherence_delta)
+        coherence_level = self._determine_coherence_level(float(coherence_delta))
 
         # Determine if fallback is needed
         needs_fallback = coherence_level in [CoherenceLevel.LOW, CoherenceLevel.CRITICAL]
 
         return CoherenceMetrics(
-            query_chunk_cosine=avg_query_chunk,
-            chunk_generation_cosine=avg_chunk_answer,
+            query_chunk_cosine=float(avg_query_chunk),
+            chunk_generation_cosine=float(avg_chunk_answer),
             query_generation_cosine=query_answer_similarity,
-            coherence_delta=coherence_delta,
+            coherence_delta=float(coherence_delta),
             coherence_level=coherence_level,
             needs_fallback=needs_fallback,
-            query_chunk_delta=query_chunk_delta,
-            chunk_generation_delta=chunk_generation_delta,
-            query_generation_delta=query_generation_delta,
+            query_chunk_delta=float(query_chunk_delta),
+            chunk_generation_delta=float(chunk_generation_delta),
+            query_generation_delta=float(query_generation_delta),
             num_chunks=num_chunks,
-            avg_chunk_similarity=avg_query_chunk,
-            min_chunk_similarity=min(query_chunk_similarities) if query_chunk_similarities else 0.0,
-            max_chunk_similarity=max(query_chunk_similarities) if query_chunk_similarities else 0.0
+            avg_chunk_similarity=float(avg_query_chunk),
+            min_chunk_similarity=float(min(query_chunk_similarities)) if query_chunk_similarities else 0.0,
+            max_chunk_similarity=float(max(query_chunk_similarities)) if query_chunk_similarities else 0.0
         )
 
     def _determine_coherence_level(self, coherence_delta: float) -> CoherenceLevel:

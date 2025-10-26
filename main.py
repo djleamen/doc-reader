@@ -56,12 +56,12 @@ Examples:
 
     if args.command == "start":
         # Quick start with automatic setup
-        print("🚀 RAG Document Q&A System - Quick Start")
+        print("RAG Document Q&A System - Quick Start")
         print("This will set up and start the system automatically.")
 
         # Check if setup is needed
         if not Path(".env").exists() or not Path("venv").exists():
-            print("📦 First time setup required...")
+            print("First time setup required...")
             run_setup()
 
         # Start Django with setup
@@ -87,12 +87,12 @@ def run_setup():
     try:
         # First try without capturing output to see what happens
         result = subprocess.run([sys.executable, "setup.py"], check=True)
-        print("✅ Setup completed successfully!")
+        print("Setup completed successfully!")
     except subprocess.CalledProcessError as e:
         print(f"❌ Setup failed with exit code {e.returncode}")
         # Try again with captured output to get error details
         try:
-            result = subprocess.run([sys.executable, "setup.py"], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, "setup.py"], capture_output=True, text=True, check=False)
             if result.stdout:
                 print(f"Output: {result.stdout}")
             if result.stderr:
@@ -130,7 +130,7 @@ def start_django(host="127.0.0.1", port=8000, with_setup=False):
             print(f"⚠️ Setup warning: {setup_error}")
 
     # Start Django development server
-    print(f"🌐 Starting Django server at http://{host}:{port}")
+    print(f"Starting Django server at http://{host}:{port}")
     print("Press Ctrl+C to stop the server")
     try:
         execute_from_command_line([
