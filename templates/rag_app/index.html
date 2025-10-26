@@ -188,7 +188,7 @@
             
             <!-- Query Progress -->
             <div id="queryProgress" class="text-center mt-3 hidden">
-                <output class="spinner-border" role="status"></output>
+                <div class="spinner-border"></div>
                 <div class="text-white mt-2">Searching for answers...</div>
             </div>
         </div>
@@ -253,10 +253,171 @@
     </div>
 </div>
 
-{% endblock %}
-
 {% block extra_js %}
 <script>
+// Utility functions in outer scope
+function displayUploadResults(response, type) {
+    let resultsDiv = $('#uploadResults');
+    resultsDiv.empty();
+    
+    if (type === 'success') {
+        let alertDiv = $(`
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i> ${response.message}
+            </div>
+        `);
+        
+        if (response.files_processed && response.files_processed.length > 0) {
+            let filesList = response.files_processed.map(f => `<li>${f}</li>`).join('');
+            alertDiv.append(`
+                <div class="mt-2">
+                    <strong>Processed files:</strong>
+                    <ul>${filesList}</ul>
+                </div>
+            `);
+        }
+        
+        if (response.total_chunks_added > 0) {
+            alertDiv.append(`
+                <div class="mt-2">
+                    <i class="fas fa-info-circle"></i> 
+                    Added ${response.total_chunks_added} document chunks to the index
+                </div>
+            `);
+        }
+        
+        if (response.errors && response.errors.length > 0) {
+            let errorsList = response.errors.map(e => `<li>${e}</li>`).join('');
+            alertDiv.append(`
+                <div class="mt-2">
+                    <strong>Errors:</strong>
+                    <ul class="text-warning">${errorsList}</ul>
+                </div>
+            `);
+        }
+        
+        resultsDiv.append(alertDiv);
+    } else {
+        resultsDiv.append(`
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i> ${response.error}
+            </div>
+        `);
+    }
+}
+
+function displayQueryResults(response) {
+    // Answer
+    $('#answerContent').html(response.answer.replace(/\n/g, '<br>'));
+    
+    // Metadata
+    let metrics = '';
+    if (response.metadata) {
+        metrics = `
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-value">${response.metadata.retrieval_count || 0}</div>
+                    <small>Retrieved</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-value">${response.metadata.context_length || 0}</div>
+                    <small>Context Length</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-value">${response.metadata.model_used || 'N/A'}</div>
+                    <small>Model</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <div class="stat-value">${response.metadata.prompt_length || 0}</div>
+                    <small>Prompt Length</small>
+                </div>
+            </div>
+        `;
+    }
+    $('#queryMetrics').html(metrics);
+    
+    // Source documents
+    if (response.source_documents && response.source_documents.length > 0) {
+        let sourcesHtml = '';
+        for (const [index, doc] of response.source_documents.entries()) {
+            let score = response.confidence_scores ? 
+                       response.confidence_scores[index] : null;
+            
+            sourcesHtml += `
+                <div class="accordion-item mb-3" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+                    <h6 class="accordion-header">
+                        <button class="btn w-100 text-start text-white" type="button" 
+                                data-bs-toggle="collapse" data-bs-target="#source${index}">
+                            <i class="fas fa-file-alt"></i> 
+                            Chunk ${index + 1} - ${doc.metadata.filename || 'Unknown'}
+                            ${score !== null ? `<span class="confidence-score float-end">Score: ${score.toFixed(4)}</span>` : ''}
+                        </button>
+                    </h6>
+                    <div id="source${index}" class="collapse">
+                        <div class="source-doc">
+                            <div class="mb-3">${doc.content.replace(/\n/g, '<br>')}</div>
+                            ${Object.keys(doc.metadata).length > 0 ? 
+                              '<strong>Metadata:</strong><br>' + 
+                              Object.entries(doc.metadata).map(([k,v]) => `<strong>${k}:</strong> ${v}`).join('<br>') : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        $('#sourceList').html(sourcesHtml);
+        $('#sourceDocuments').show();
+    } else {
+        $('#sourceDocuments').hide();
+    }
+    
+    $('#resultsSection').show();
+    
+    // Scroll to results
+    $('html, body').animate({
+        scrollTop: $('#resultsSection').offset().top - 100
+    }, 1000);
+}
+
+function displayQueryError(error) {
+    $('#resultsSection').html(`
+        <div class="glass-card">
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-triangle"></i> ${error}
+            </div>
+        </div>
+    `).show();
+}
+
+globalThis.removeFile = function(index) {
+    const fileInputEl = document.getElementById('fileInput');
+    const changeEvent = new Event('change', { bubbles: true });
+    
+    // Update the file input element
+    if (fileInputEl && fileInputEl.files) {
+        const dt = new DataTransfer();
+        const files = Array.from(fileInputEl.files);
+        
+        files.forEach((file, i) => {
+            if (i !== index) {
+                dt.items.add(file);
+            }
+        });
+        
+        fileInputEl.files = dt.files;
+        fileInputEl.dispatchEvent(changeEvent);
+    }
+}
+
+globalThis.setQuestion = function(element) {
+    $('#questionInput').val($(element).text().trim());
+}
+
 $(document).ready(function() {
     let selectedFiles = [];
     let currentIndexName = 'default';
@@ -339,7 +500,7 @@ $(document).ready(function() {
                         <i class="fas fa-file"></i> ${file.name} 
                         <small>(${(file.size / 1024 / 1024).toFixed(2)} MB)</small>
                     </span>
-                    <button class="btn btn-sm btn-outline-danger" onclick="removeFile(${index})" title="Remove file" type="button">
+                    <button class="btn btn-sm btn-outline-danger" onclick="globalThis.removeFile(${index})" title="Remove file" type="button">
                         <i class="fas fa-times"></i>
                     </button>
                 </li>
@@ -348,16 +509,6 @@ $(document).ready(function() {
         }
         
         $('#selectedFiles').show();
-    }
-    
-    globalThis.removeFile = function(index) {
-        selectedFiles.splice(index, 1);
-        if (selectedFiles.length > 0) {
-            displaySelectedFiles();
-        } else {
-            $('#selectedFiles').hide();
-            $('#uploadBtn').prop('disabled', true);
-        }
     }
     
     function uploadDocuments() {
@@ -410,56 +561,6 @@ $(document).ready(function() {
                 $('.progress-bar').css('width', '0%');
             }
         });
-    }
-    
-    function displayUploadResults(response, type) {
-        let resultsDiv = $('#uploadResults');
-        resultsDiv.empty();
-        
-        if (type === 'success') {
-            let alertDiv = $(`
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle"></i> ${response.message}
-                </div>
-            `);
-            
-            if (response.files_processed && response.files_processed.length > 0) {
-                let filesList = response.files_processed.map(f => `<li>${f}</li>`).join('');
-                alertDiv.append(`
-                    <div class="mt-2">
-                        <strong>Processed files:</strong>
-                        <ul>${filesList}</ul>
-                    </div>
-                `);
-            }
-            
-            if (response.total_chunks_added > 0) {
-                alertDiv.append(`
-                    <div class="mt-2">
-                        <i class="fas fa-info-circle"></i> 
-                        Added ${response.total_chunks_added} document chunks to the index
-                    </div>
-                `);
-            }
-            
-            if (response.errors && response.errors.length > 0) {
-                let errorsList = response.errors.map(e => `<li>${e}</li>`).join('');
-                alertDiv.append(`
-                    <div class="mt-2">
-                        <strong>Errors:</strong>
-                        <ul class="text-warning">${errorsList}</ul>
-                    </div>
-                `);
-            }
-            
-            resultsDiv.append(alertDiv);
-        } else {
-            resultsDiv.append(`
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-triangle"></i> ${response.error}
-                </div>
-            `);
-        }
     }
     
     function resetUploadForm() {
@@ -526,94 +627,6 @@ $(document).ready(function() {
         });
     }
     
-    function displayQueryResults(response) {
-        // Answer
-        $('#answerContent').html(response.answer.replaceAll(/\n/g, '<br>'));
-        
-        // Metadata
-        let metrics = '';
-        if (response.metadata) {
-            metrics = `
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value">${response.metadata.retrieval_count || 0}</div>
-                        <small>Retrieved</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value">${response.metadata.context_length || 0}</div>
-                        <small>Context Length</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value">${response.metadata.model_used || 'N/A'}</div>
-                        <small>Model</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value">${response.metadata.prompt_length || 0}</div>
-                        <small>Prompt Length</small>
-                    </div>
-                </div>
-            `;
-        }
-        $('#queryMetrics').html(metrics);
-        
-        // Source documents
-        if (response.source_documents && response.source_documents.length > 0) {
-            let sourcesHtml = '';
-            for (const [index, doc] of response.source_documents.entries()) {
-                let score = response.confidence_scores ? 
-                           response.confidence_scores[index] : null;
-                
-                sourcesHtml += `
-                    <div class="accordion-item mb-3" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
-                        <h6 class="accordion-header">
-                            <button class="btn w-100 text-start text-white" type="button" 
-                                    data-bs-toggle="collapse" data-bs-target="#source${index}">
-                                <i class="fas fa-file-alt"></i> 
-                                Chunk ${index + 1} - ${doc.metadata.filename || 'Unknown'}
-                                ${score !== null ? `<span class="confidence-score float-end">Score: ${score.toFixed(4)}</span>` : ''}
-                            </button>
-                        </h6>
-                        <div id="source${index}" class="collapse">
-                            <div class="source-doc">
-                                <div class="mb-3">${doc.content.replaceAll(/\n/g, '<br>')}</div>
-                                ${Object.keys(doc.metadata).length > 0 ? 
-                                  '<strong>Metadata:</strong><br>' + 
-                                  Object.entries(doc.metadata).map(([k,v]) => `<strong>${k}:</strong> ${v}`).join('<br>') : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-            $('#sourceList').html(sourcesHtml);
-            $('#sourceDocuments').show();
-        } else {
-            $('#sourceDocuments').hide();
-        }
-        
-        $('#resultsSection').show();
-        
-        // Scroll to results
-        $('html, body').animate({
-            scrollTop: $('#resultsSection').offset().top - 100
-        }, 1000);
-    }
-    
-    function displayQueryError(error) {
-        $('#resultsSection').html(`
-            <div class="glass-card">
-                <div class="alert alert-error">
-                    <i class="fas fa-exclamation-triangle"></i> ${error}
-                </div>
-            </div>
-        `).show();
-    }
-    
     function loadIndexStats() {
         $.ajax({
             url: '/api/index-stats/',
@@ -678,11 +691,6 @@ $(document).ready(function() {
                 $('#clearDocuments').prop('disabled', false).html('<i class="fas fa-trash-alt"></i> Clear All Documents');
             }
         });
-    }
-    
-    // Sample question handler
-    globalThis.setQuestion = function(element) {
-        $('#questionInput').val($(element).text().trim());
     }
     
 });

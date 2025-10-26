@@ -11,7 +11,7 @@ from pathlib import Path
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.decorators import api_view
@@ -384,6 +384,7 @@ def index_stats(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@csrf_protect
 @api_view(['DELETE'])
 def clear_conversation(request):
     '''Clear conversation history for current session.'''
@@ -410,6 +411,7 @@ def clear_conversation(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+@csrf_protect
 @api_view(['DELETE'])
 def clear_documents(request):
     '''Clear all documents from an index.'''

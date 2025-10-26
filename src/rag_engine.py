@@ -113,20 +113,24 @@ Answer:'''
         initial_k = min(k * 3, 20)
 
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
-            doc_score_pairs = self.document_index.search_with_scores(question, initial_k)
-            filtered_pairs = self._rerank_and_filter_chunks(question, doc_score_pairs, target_k=k)
+            doc_score_pairs = self.document_index.search_with_scores(
+                question, initial_k)
+            filtered_pairs = self._rerank_and_filter_chunks(
+                question, doc_score_pairs, target_k=k)
             source_documents = [doc for doc, score in filtered_pairs]
             confidence_scores = [float(score) for doc, score in filtered_pairs]
         else:
             source_documents = self.document_index.search(question, initial_k)
-            source_documents = self._filter_chunks_by_relevance(question, source_documents, target_k=k)
+            source_documents = self._filter_chunks_by_relevance(
+                question, source_documents, target_k=k)
             confidence_scores = [1.0] * len(source_documents)
 
         return source_documents, confidence_scores
 
     def _generate_answer(self, context: str, question: str) -> str:
         '''Generate answer from context and question.'''
-        prompt = self.prompt_template.format(context=context, question=question)
+        prompt = self.prompt_template.format(
+            context=context, question=question)
         try:
             answer = self.llm.predict(prompt)
             logger.info("Successfully generated answer")
@@ -144,13 +148,16 @@ Answer:'''
         if fallback_action.new_k_value <= original_k:
             return None, None, None
 
-        logger.info(f"Boosting k from {original_k} to {fallback_action.new_k_value}")
+        logger.info(
+            f"Boosting k from {original_k} to {fallback_action.new_k_value}")
 
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
             boosted_doc_score_pairs = self.document_index.search_with_scores(
                 question, fallback_action.new_k_value)
-            boosted_source_documents = [doc for doc, score in boosted_doc_score_pairs]
-            boosted_confidence_scores = [float(score) for doc, score in boosted_doc_score_pairs]
+            boosted_source_documents = [
+                doc for doc, score in boosted_doc_score_pairs]
+            boosted_confidence_scores = [
+                float(score) for doc, score in boosted_doc_score_pairs]
         else:
             boosted_source_documents = self.document_index.search(
                 question, fallback_action.new_k_value)
@@ -159,13 +166,14 @@ Answer:'''
         return boosted_source_documents, boosted_confidence_scores, None
 
     def _apply_coherence_fallbacks(self, question: str, answer: str, source_documents,
-                                  confidence_scores, coherence_metrics, fallback_action,
-                                  original_k: int, include_scores: bool):
+                                   confidence_scores, coherence_metrics, fallback_action,
+                                   original_k: int, include_scores: bool):
         '''Apply coherence fallback actions.'''
         if not coherence_metrics.needs_fallback:
             return answer, source_documents, confidence_scores
 
-        logger.info(f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
+        logger.info(
+            f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
 
         # 1. Boost k if needed
         boosted_docs, boosted_scores, _ = self._apply_coherence_boost(
@@ -174,8 +182,10 @@ Answer:'''
         if boosted_docs and len(boosted_docs) > len(source_documents):
             boosted_context = self._prepare_context(boosted_docs)
             try:
-                boosted_answer = self._generate_answer(boosted_context, question)
-                logger.info("Successfully regenerated answer with boosted retrieval")
+                boosted_answer = self._generate_answer(
+                    boosted_context, question)
+                logger.info(
+                    "Successfully regenerated answer with boosted retrieval")
                 source_documents = boosted_docs
                 confidence_scores = boosted_scores
                 answer = boosted_answer
@@ -185,7 +195,8 @@ Answer:'''
         # 2. Apply hedging
         final_answer = answer
         if fallback_action.hedge_output and self.coherence_validator:
-            final_answer = self.coherence_validator.get_hedged_response(answer, coherence_metrics)
+            final_answer = self.coherence_validator.get_hedged_response(
+                answer, coherence_metrics)
             logger.debug("Applied hedging to response")
 
         # 3. Add uncertainty warning
@@ -196,8 +207,8 @@ Answer:'''
         return final_answer, source_documents, confidence_scores
 
     def _validate_and_apply_coherence(self, question: str, source_documents, answer: str,
-                                     confidence_scores, original_k: int, include_scores: bool,
-                                     enable_coherence_fallback: bool):
+                                      confidence_scores, original_k: int, include_scores: bool,
+                                      enable_coherence_fallback: bool):
         '''Validate coherence and apply fallbacks if needed.'''
         if not (self.enable_coherence_validation and self.coherence_validator and enable_coherence_fallback):
             return answer, source_documents, confidence_scores, None, None
@@ -235,7 +246,8 @@ Answer:'''
         original_k = k
 
         # Retrieve documents
-        source_documents, confidence_scores = self._retrieve_documents(question, k, include_scores)
+        source_documents, confidence_scores = self._retrieve_documents(
+            question, k, include_scores)
 
         if not source_documents:
             logger.warning("No relevant chunks found for query")
@@ -287,66 +299,50 @@ Answer:'''
             coherence_metrics=coherence_metrics,
             fallback_action=fallback_action
         )
-    def _rerank_and_filter_chunks(
-        self,
-        question: str,
-        doc_score_pairs: List[tuple],
-        target_k: int
-    ) -> List[tuple]:
-        '''Rerank and filter chunks using multiple criteria.'''
-        if not doc_score_pairs:
-            return []
 
-        # Extract unique keywords from question for relevance scoring
-        question_lower = question.lower()
-        question_words = set(question_lower.split())
-
-        # Remove common stop words
+    def _extract_question_keywords(self, question: str) -> set:
+        '''Extract meaningful keywords from question by removing stop words.'''
+        question_words = set(question.lower().split())
         stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at',
                       'to', 'for', 'of', 'with', 'is', 'are', 'was', 'were',
                       'what', 'when', 'where', 'who', 'why', 'how', 'which'}
-        question_keywords = question_words - stop_words
+        return question_words - stop_words
 
-        # Calculate enhanced scores for each chunk
-        scored_chunks = []
-        for doc, similarity_score in doc_score_pairs:
-            content_lower = doc.page_content.lower()
+    def _calculate_chunk_score(self, doc: Document, similarity_score: float,
+                               question_keywords: set) -> tuple:
+        '''Calculate combined relevance score for a document chunk.'''
+        content_lower = doc.page_content.lower()
+        sim_score = float(similarity_score)
 
-            # Factor 1: Original similarity score (normalized)
-            sim_score = float(similarity_score)
+        # Keyword overlap bonus
+        content_words = set(content_lower.split())
+        keyword_matches = len(question_keywords & content_words)
+        keyword_score = min(
+            keyword_matches / max(len(question_keywords), 1), 1.0)
 
-            # Factor 2: Keyword overlap bonus
-            content_words = set(content_lower.split())
-            keyword_matches = len(question_keywords & content_words)
-            keyword_score = min(
-                keyword_matches / max(len(question_keywords), 1), 1.0)
+        # Content length penalty
+        length_penalty = self._get_length_penalty(len(doc.page_content))
 
-            # Factor 3: Content length penalty (prefer substantial chunks)
-            content_length = len(doc.page_content)
-            if content_length < 100:
-                length_penalty = 0.8  # Short chunks are less likely to be comprehensive
-            elif content_length > 2000:
-                length_penalty = 0.9  # Very long chunks might be too general
-            else:
-                length_penalty = 1.0
+        # Combined score
+        combined_score = (
+            sim_score * 0.6 +
+            keyword_score * 0.3 +
+            length_penalty * 0.1
+        )
 
-            # Factor 4: Diversity bonus (prefer chunks from different sources)
-            # This will be applied in a second pass
+        return (doc, combined_score, doc.metadata.get('source', 'unknown'))
 
-            # Combined score
-            combined_score = (
-                sim_score * 0.6 +           # Similarity is most important
-                keyword_score * 0.3 +       # Keyword overlap is valuable
-                length_penalty * 0.1        # Length consideration
-            )
+    def _get_length_penalty(self, content_length: int) -> float:
+        '''Calculate penalty based on content length.'''
+        if content_length < 100:
+            return 0.8  # Short chunks are less likely to be comprehensive
+        elif content_length > 2000:
+            return 0.9  # Very long chunks might be too general
+        else:
+            return 1.0
 
-            scored_chunks.append(
-                (doc, combined_score, doc.metadata.get('source', 'unknown')))
-
-        # Sort by combined score
-        scored_chunks.sort(key=lambda x: x[1], reverse=True)
-
-        # Apply diversity: Try to get chunks from different sources
+    def _select_diverse_chunks(self, scored_chunks: List[tuple], target_k: int) -> List[tuple]:
+        '''Select chunks with source diversity preference.'''
         selected_chunks = []
         source_counts = {}
 
@@ -360,13 +356,49 @@ Answer:'''
                 selected_chunks.append((doc, score))
                 source_counts[source] = source_counts.get(source, 0) + 1
 
-        # If we don't have enough, add remaining high-scoring chunks
+        # Second pass: Fill remaining slots if needed
         if len(selected_chunks) < target_k:
-            for doc, score, source in scored_chunks:
-                if len(selected_chunks) >= target_k:
-                    break
-                if not any(d.page_content == doc.page_content for d, _ in selected_chunks):
-                    selected_chunks.append((doc, score))
+            selected_chunks = self._fill_remaining_slots(
+                scored_chunks, selected_chunks, target_k
+            )
+
+        return selected_chunks
+
+    def _fill_remaining_slots(self, scored_chunks: List[tuple],
+                              selected_chunks: List[tuple], target_k: int) -> List[tuple]:
+        '''Fill remaining slots with high-scoring chunks avoiding duplicates.'''
+        for doc, score, _ in scored_chunks:
+            if len(selected_chunks) >= target_k:
+                break
+            if not any(d.page_content == doc.page_content for d, _ in selected_chunks):
+                selected_chunks.append((doc, score))
+        return selected_chunks
+
+    def _rerank_and_filter_chunks(
+        self,
+        question: str,
+        doc_score_pairs: List[tuple],
+        target_k: int
+    ) -> List[tuple]:
+        '''Rerank and filter chunks using multiple criteria.'''
+        if not doc_score_pairs:
+            return []
+
+        # Extract keywords for relevance scoring
+        question_keywords = self._extract_question_keywords(question)
+
+        # Calculate enhanced scores for each chunk
+        scored_chunks = [
+            self._calculate_chunk_score(
+                doc, similarity_score, question_keywords)
+            for doc, similarity_score in doc_score_pairs
+        ]
+
+        # Sort by combined score
+        scored_chunks.sort(key=lambda x: x[1], reverse=True)
+
+        # Apply diversity selection
+        selected_chunks = self._select_diverse_chunks(scored_chunks, target_k)
 
         logger.info(
             f"Reranked {len(doc_score_pairs)} chunks to {len(selected_chunks)} using enhanced scoring")
