@@ -457,7 +457,7 @@ def clear_documents(request):
     except (OSError, IOError, ValueError, RuntimeError) as e:
         logger_instance.error("Failed to clear documents", exc_info=True)
         return Response({
-            'error': f'Failed to clear documents: {str(e)}'
+            'error': 'Failed to clear documents due to a server error.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
