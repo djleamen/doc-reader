@@ -63,20 +63,36 @@ logger.error("Error occurred: {}", error_message)
 
 ### Core Directories
 - `django_app/`: Django project settings and configuration
+  - `settings.py`: Django configuration, loads from `.env`
+  - `urls.py`: URL routing for the application
 - `rag_app/`: Main Django application with models, views, APIs
+  - `models.py`: Database models for documents, indexes, queries
+  - `views.py`: API endpoints and view logic
+  - `serializers.py`: DRF serializers for API
+  - `tests.py`: Test cases
 - `src/`: Core RAG logic and document processing
+  - `rag_engine.py`: RAG implementation with LangChain
+  - `vector_store.py`: Vector database operations
+  - `document_processor.py`: Multi-format document parsing
+  - `semantic_coherence.py`: Coherence validation logic
+  - `config.py`: Configuration management
+  - `cli.py`: Command-line interface
 - `templates/`: HTML templates with Bootstrap UI
 - `static/`: CSS, JS, and static assets
-- `documents/`: Uploaded document storage
-- `indexes/`: Vector database storage
-- `logs/`: Application logs
+- `documents/`: Uploaded document storage (created at runtime)
+- `indexes/`: Vector database storage (created at runtime)
+- `logs/`: Application logs (created at runtime)
 
 ### Key Files
-- `main.py`: Unified entry point for all operations
-- `manage.py`: Django management commands
+- `main.py`: **Unified entry point** for all operations (start, django, cli, setup)
+  - Use `python main.py start` for quick start with automatic setup
+  - Use `python main.py cli` for command-line operations
+  - Django management is integrated, no separate `manage.py` needed
+- `setup.py`: First-time environment setup (creates venv, installs deps, creates dirs)
 - `requirements.txt`: Python dependencies
 - `docker-compose.yml`: Container orchestration
-- `.env`: Environment variables (not in repo)
+- `.env`: Environment variables (not in repo, copy from `.env.example`)
+- `.env.example`: Template for environment variables
 
 ## Common Patterns
 
@@ -139,17 +155,35 @@ def get_rag_engine(index_name: str = "default"):
 5. **Tests**: Add comprehensive tests in `rag_app/tests.py`
 
 ### Database Migrations
+Django migrations are handled through the `main.py start` command automatically, or manually:
 ```bash
-python manage.py makemigrations
-python manage.py migrate
+# Migrations run automatically with main.py start
+python main.py start
+
+# For manual migration management, use Django's management system:
+python -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'django_app.settings'); import django; django.setup(); from django.core.management import execute_from_command_line; execute_from_command_line(['manage.py', 'makemigrations'])"
+python -c "import os; os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'django_app.settings'); import django; django.setup(); from django.core.management import execute_from_command_line; execute_from_command_line(['manage.py', 'migrate'])"
 ```
 
 ### Environment Variables
-Always use settings from `src/config.py` which loads from `.env`:
+All configuration is managed through `.env` file and accessed via `src/config.py`:
+
 ```python
 from src.config import settings
+
+# Access configuration
 openai_key = settings.openai_api_key
+chunk_size = settings.chunk_size
+vector_db_type = settings.vector_db_type
 ```
+
+Key environment variables:
+- `OPENAI_API_KEY`: Required for embeddings and chat completions
+- `DJANGO_SECRET_KEY`: Required for Django security
+- `VECTOR_DB_TYPE`: Choice of vector database (faiss, chroma, pinecone)
+- `CHUNK_SIZE`: Text chunk size for document processing
+- `TOP_K_RESULTS`: Number of results to retrieve
+- `ENABLE_COHERENCE_VALIDATION`: Enable semantic coherence tracking
 
 ### Vector Store Operations
 ```python
@@ -183,7 +217,34 @@ results = index.similarity_search(query, k=5)
 - Use background tasks for document processing
 - Monitor memory usage with large documents
 
-## Testing Patterns
+## Testing
+
+### Running Tests
+The project uses pytest for testing Django models, views, and API endpoints.
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage report
+pytest --cov=src --cov=rag_app
+
+# Run specific test file
+pytest rag_app/tests.py
+
+# Run specific test class or method
+pytest rag_app/tests.py::DocumentIndexModelTest
+pytest rag_app/tests.py::DocumentIndexModelTest::test_create_index
+
+# Run tests with verbose output
+pytest -v
+
+# Run tests and stop on first failure
+pytest -x
+```
+
+### Test Structure
+Tests are located in `rag_app/tests.py` and follow Django's TestCase patterns:
 
 ```python
 from django.test import TestCase, Client
@@ -206,6 +267,37 @@ class DocumentUploadTest(TestCase):
         self.assertEqual(response.status_code, 200)
 ```
 
+### Writing New Tests
+When adding new functionality:
+1. Add test cases to `rag_app/tests.py`
+2. Follow Django's TestCase patterns
+3. Use descriptive test names (e.g., `test_query_with_conversation_history`)
+4. Test both success and failure cases
+5. Mock external API calls (OpenAI) to avoid charges and ensure reliability
+
+## Development Workflow
+
+### Initial Setup
+1. Clone the repository
+2. Run `python main.py setup` to create virtual environment and install dependencies
+3. Copy `.env.example` to `.env` and add your OpenAI API key
+4. Run `python main.py start` to initialize database and start server
+
+### Making Changes
+1. Create a feature branch from `main`
+2. Make code changes following the style guidelines above
+3. Add or update tests in `rag_app/tests.py`
+4. Run tests with `pytest` to ensure nothing breaks
+5. Test manually using the web UI or CLI
+6. Commit with descriptive messages
+7. Submit a pull request
+
+### Before Committing
+- Run `pytest` to ensure all tests pass
+- Test your changes manually through the web UI
+- Verify no sensitive data (API keys, secrets) in commits
+- Follow existing code patterns and conventions
+
 ## Common Issues and Solutions
 
 ### Document Processing
@@ -227,19 +319,20 @@ class DocumentUploadTest(TestCase):
 
 ```bash
 # Development
-python main.py start                    # Quick start with setup
-python manage.py runserver             # Django development server
-python manage.py shell                 # Django shell
+python main.py start                    # Quick start with setup (runs migrations automatically)
+python main.py django                   # Start Django web application (setup required first)
+python main.py setup                    # First-time environment setup only
 
 # CLI Operations
 python main.py cli add document.pdf    # Add document
-python main.py cli query "question"    # Query system
+python main.py cli query "question"    # Query system  
 python main.py cli stats               # Show statistics
+python main.py cli interactive         # Interactive CLI mode
 
-# Database
-python manage.py makemigrations        # Create migrations
-python manage.py migrate               # Apply migrations
-python manage.py createsuperuser       # Create admin user
+# Testing
+pytest                                  # Run all tests
+pytest rag_app/tests.py                # Run specific test file
+pytest --cov=src --cov=rag_app         # Run tests with coverage
 
 # Docker
 docker-compose up                      # Start with Docker
