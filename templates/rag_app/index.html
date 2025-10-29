@@ -418,6 +418,55 @@ globalThis.setQuestion = function(element) {
     $('#questionInput').val($(element).text().trim());
 }
 
+function clearConversation() {
+    $.ajax({
+        url: '/api/conversation/',
+        type: 'DELETE',
+        headers: {
+            'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+        },
+        success: function() {
+            alert('Conversation cleared successfully!');
+        },
+        error: function() {
+            alert('Failed to clear conversation');
+        }
+    });
+}
+
+function clearAllDocuments(currentIndexName) {
+    if (!confirm(`⚠️ WARNING: This will permanently delete all documents and chunks from the "${currentIndexName}" index.\n\nThis action cannot be undone. Are you sure you want to continue?`)) {
+        return;
+    }
+    
+    // Show loading indicator
+    $('#clearDocuments').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
+    
+    $.ajax({
+        url: '/api/clear-documents/',
+        type: 'DELETE',
+        data: { index_name: currentIndexName },
+        headers: {
+            'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+        },
+        success: function(response) {
+            alert(response.message || 'All documents cleared successfully!');
+            // Trigger stats reload through an event or global function
+            if (typeof loadIndexStats === 'function') {
+                loadIndexStats();
+            }
+            $('#resultsSection').hide();
+        },
+        error: function(xhr) {
+            const errorMsg = xhr.responseJSON?.error || 'Failed to clear documents';
+            alert('Error: ' + errorMsg);
+        },
+        complete: function() {
+            $('#clearDocuments').prop('disabled', false).html('<i class="fas fa-trash-alt"></i> Clear All Documents');
+        }
+    });
+}
+
 $(document).ready(function() {
     let selectedFiles = [];
     let currentIndexName = 'default';
@@ -475,7 +524,9 @@ $(document).ready(function() {
         // Actions
         $('#refreshStats').on('click', loadIndexStats);
         $('#clearConversation').on('click', clearConversation);
-        $('#clearDocuments').on('click', clearAllDocuments);
+        $('#clearDocuments').on('click', function() {
+            clearAllDocuments(currentIndexName);
+        });
     }
     
     function handleFileSelection(e) {
@@ -633,52 +684,6 @@ $(document).ready(function() {
             error: function() {
                 $('#documentCount').text('-');
                 $('#chunkCount').text('-');
-            }
-        });
-    }
-    
-    function clearConversation() {
-        $.ajax({
-            url: '/api/conversation/',
-            type: 'DELETE',
-            headers: {
-                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-            },
-            success: function() {
-                alert('Conversation cleared successfully!');
-            },
-            error: function() {
-                alert('Failed to clear conversation');
-            }
-        });
-    }
-    
-    function clearAllDocuments() {
-        if (!confirm(`⚠️ WARNING: This will permanently delete all documents and chunks from the "${currentIndexName}" index.\n\nThis action cannot be undone. Are you sure you want to continue?`)) {
-            return;
-        }
-        
-        // Show loading indicator
-        $('#clearDocuments').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
-        
-        $.ajax({
-            url: '/api/clear-documents/',
-            type: 'DELETE',
-            data: { index_name: currentIndexName },
-            headers: {
-                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-            },
-            success: function(response) {
-                alert(response.message || 'All documents cleared successfully!');
-                loadIndexStats();
-                $('#resultsSection').hide();
-            },
-            error: function(xhr) {
-                const errorMsg = xhr.responseJSON?.error || 'Failed to clear documents';
-                alert('Error: ' + errorMsg);
-            },
-            complete: function() {
-                $('#clearDocuments').prop('disabled', false).html('<i class="fas fa-trash-alt"></i> Clear All Documents');
             }
         });
     }
