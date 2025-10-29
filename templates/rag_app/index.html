@@ -308,7 +308,7 @@ function displayUploadResults(response, type) {
 
 function displayQueryResults(response) {
     // Answer
-    $('#answerContent').html(response.answer.replace(/\n/g, '<br>'));
+    $('#answerContent').html(response.answer.replaceAll('\n', '<br>'));
     
     // Metadata
     let metrics = '';
@@ -356,12 +356,12 @@ function displayQueryResults(response) {
                                 data-bs-toggle="collapse" data-bs-target="#source${index}">
                             <i class="fas fa-file-alt"></i> 
                             Chunk ${index + 1} - ${doc.metadata.filename || 'Unknown'}
-                            ${score !== null ? `<span class="confidence-score float-end">Score: ${score.toFixed(4)}</span>` : ''}
+                            ${score === null ? '' : `<span class="confidence-score float-end">Score: ${score.toFixed(4)}</span>`}
                         </button>
                     </h6>
                     <div id="source${index}" class="collapse">
                         <div class="source-doc">
-                            <div class="mb-3">${doc.content.replace(/\n/g, '<br>')}</div>
+                            <div class="mb-3">${doc.content.replaceAll('\n', '<br>')}</div>
                             ${Object.keys(doc.metadata).length > 0 ? 
                               '<strong>Metadata:</strong><br>' + 
                               Object.entries(doc.metadata).map(([k,v]) => `<strong>${k}:</strong> ${v}`).join('<br>') : ''}
@@ -403,11 +403,11 @@ globalThis.removeFile = function(index) {
         const dt = new DataTransfer();
         const files = Array.from(fileInputEl.files);
         
-        files.forEach((file, i) => {
+        for (const [i, file] of files.entries()) {
             if (i !== index) {
                 dt.items.add(file);
             }
-        });
+        }
         
         fileInputEl.files = dt.files;
         fileInputEl.dispatchEvent(changeEvent);
@@ -421,7 +421,6 @@ globalThis.setQuestion = function(element) {
 $(document).ready(function() {
     let selectedFiles = [];
     let currentIndexName = 'default';
-    let conversationHistory = [];
     
     // Initialize
     initializeEventListeners();
@@ -605,13 +604,6 @@ $(document).ready(function() {
             },
             success: function(response) {
                 displayQueryResults(response);
-                if ($('#conversationalMode').is(':checked')) {
-                    conversationHistory.push({
-                        question: question,
-                        answer: response.answer,
-                        timestamp: new Date().toISOString()
-                    });
-                }
             },
             error: function(xhr) {
                 let errorMsg = 'Query failed';
@@ -653,7 +645,6 @@ $(document).ready(function() {
                 'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
             },
             success: function() {
-                conversationHistory = [];
                 alert('Conversation cleared successfully!');
             },
             error: function() {
@@ -681,7 +672,6 @@ $(document).ready(function() {
                 alert(response.message || 'All documents cleared successfully!');
                 loadIndexStats();
                 $('#resultsSection').hide();
-                conversationHistory = [];
             },
             error: function(xhr) {
                 const errorMsg = xhr.responseJSON?.error || 'Failed to clear documents';

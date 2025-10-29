@@ -454,7 +454,7 @@ def clear_documents(request):
             'index_name': index_name
         })
 
-    except (OSError, IOError, ValueError, RuntimeError) as e:
+    except (OSError, IOError, ValueError, RuntimeError):
         logger_instance.error("Failed to clear documents", exc_info=True)
         return Response({
             'error': 'Failed to clear documents due to a server error.'
