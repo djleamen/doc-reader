@@ -439,7 +439,6 @@ function clearAllDocuments(currentIndexName) {
         return;
     }
     
-    // Show loading indicator
     $('#clearDocuments').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
     
     $.ajax({
@@ -451,7 +450,6 @@ function clearAllDocuments(currentIndexName) {
         },
         success: function(response) {
             alert(response.message || 'All documents cleared successfully!');
-            // Trigger stats reload through an event or global function
             if (typeof loadIndexStats === 'function') {
                 loadIndexStats();
             }
