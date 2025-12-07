@@ -274,7 +274,7 @@ class AzureConversationalQueryView(APIView):
         except Exception as e:
             logger.error(f"Azure conversational query failed: {e}")
             return Response(
-                {'error': str(e)},
+                {'error': 'An internal error occurred.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
