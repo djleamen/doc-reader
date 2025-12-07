@@ -308,7 +308,7 @@ def azure_index_stats(request):
     except Exception as e:
         logger.error(f"Failed to get Azure stats: {e}")
         return JsonResponse(
-            {'error': str(e)},
+            {'error': 'An internal error occurred.'},
             status=500
         )
 
