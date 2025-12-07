@@ -89,7 +89,7 @@ class AzureDocumentUploadView(APIView):
                     results.append({
                         'status': 'error',
                         'file': file.name,
-                        'error': str(e)
+                        'error': 'An internal error occurred while processing this file.'
                     })
 
             return Response({
