@@ -384,7 +384,7 @@ def azure_clear_conversation(request):
     except Exception as e:
         logger.error(f"Failed to clear Azure conversation: {e}")
         return JsonResponse(
-            {'error': str(e)},
+            {'error': 'An internal error occurred.'},
             status=500
         )
 
