@@ -102,7 +102,7 @@ class AzureDocumentUploadView(APIView):
         except Exception as e:
             logger.error(f"Document upload failed: {e}")
             return Response(
-                {'error': str(e)},
+                {'error': 'An internal error has occurred.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
