@@ -44,9 +44,14 @@ class QueryCache:
         self.ttl = ttl
 
     def _generate_key(self, query: str, index_name: str, k: int) -> str:
-        """Generate cache key from query parameters."""
+        """
+        Generate cache key from query parameters.
+        
+        Note: Uses SHA256 for cache key generation (non-security purpose).
+        This is not for cryptographic security, just consistent key generation.
+        """
         key_string = f"{query}:{index_name}:{k}"
-        return hashlib.md5(key_string.encode()).hexdigest()
+        return hashlib.sha256(key_string.encode()).hexdigest()
 
     def get(self, query: str, index_name: str, k: int) -> Optional[AzureQueryResult]:
         """Get cached result if available and not expired."""

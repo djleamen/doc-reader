@@ -315,7 +315,6 @@ def azure_index_stats(request):
 
 
 @api_view(['POST'])
-@csrf_exempt
 def azure_clear_cache(request):
     """
     Clear Azure RAG query cache.
@@ -350,7 +349,6 @@ def azure_clear_cache(request):
 
 
 @api_view(['POST'])
-@csrf_exempt
 def azure_clear_conversation(request):
     """
     Clear conversation history.
