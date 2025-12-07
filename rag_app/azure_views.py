@@ -343,7 +343,7 @@ def azure_clear_cache(request):
     except Exception as e:
         logger.error(f"Failed to clear Azure cache: {e}")
         return JsonResponse(
-            {'error': str(e)},
+            {'error': 'An internal error occurred.'},
             status=500
         )
 
