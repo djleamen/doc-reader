@@ -142,7 +142,7 @@ class AzureRAGEngine:
             logger.error(f"Failed to add document: {e}")
             return {
                 "status": "error",
-                "error": str(e),
+                "error": "An internal error occurred while processing this file.",
                 "file_path": file_path,
             }
 
