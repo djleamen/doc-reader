@@ -429,9 +429,9 @@ def azure_health_check(request):
         }, status=http_status)
 
     except Exception as e:
-        logger.error(f"Azure health check failed: {e}")
+        logger.exception("Azure health check failed")  # log full stack trace
         return JsonResponse({
             'status': 'unhealthy',
-            'error': str(e),
+            'error': 'An internal error occurred.',
             'pipeline': 'azure',
         }, status=503)
