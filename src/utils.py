@@ -216,7 +216,12 @@ def get_system_info() -> Dict[str, Any]:
         # Fallback if psutil is not available
         return {
             "platform": platform.platform(),
-            "python_version": platform.python_version()
+            "python_version": platform.python_version(),
+            "cpu_count": "unknown",
+            "memory_total_gb": "unknown",
+            "memory_available_gb": "unknown", 
+            "disk_total_gb": "unknown",
+            "disk_free_gb": "unknown"
         }
 
 

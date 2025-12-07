@@ -4,6 +4,7 @@ URL configuration for the RAG app.
 
 from django.urls import path
 from . import views
+from . import azure_views
 
 # API URLs
 api_urlpatterns = [
@@ -18,6 +19,22 @@ api_urlpatterns = [
     path('clear-documents/', views.clear_documents,
          name='api-clear-documents'),
     path('health/', views.health_check, name='api-health'),
+
+    # Azure RAG Pipeline endpoints
+    path('azure/upload-documents/', azure_views.AzureDocumentUploadView.as_view(),
+         name='api-azure-upload-documents'),
+    path('azure/query/', azure_views.AzureQueryView.as_view(),
+         name='api-azure-query'),
+    path('azure/conversational-query/', azure_views.AzureConversationalQueryView.as_view(),
+         name='api-azure-conversational-query'),
+    path('azure/index-stats/', azure_views.azure_index_stats,
+         name='api-azure-index-stats'),
+    path('azure/clear-cache/', azure_views.azure_clear_cache,
+         name='api-azure-clear-cache'),
+    path('azure/clear-conversation/', azure_views.azure_clear_conversation,
+         name='api-azure-clear-conversation'),
+    path('azure/health/', azure_views.azure_health_check,
+         name='api-azure-health'),
 ]
 
 # Web URLs

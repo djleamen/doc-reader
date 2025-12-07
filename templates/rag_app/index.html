@@ -8,6 +8,27 @@
         <div class="glass-card">
             <h5 class="text-white"><i class="fas fa-cog"></i> Configuration</h5>
             
+            <!-- Pipeline Selection -->
+            <div class="mb-4">
+                <label class="form-label text-white d-flex align-items-center">
+                    <i class="fas fa-cloud me-2"></i> RAG Pipeline
+                </label>
+                <div class="btn-group w-100" role="group" aria-label="Pipeline selection">
+                    <input type="radio" class="btn-check" name="pipelineSelect" id="classicPipeline" value="classic" checked>
+                    <label class="btn btn-outline-light" for="classicPipeline">
+                        <i class="fas fa-server"></i> Classic
+                    </label>
+                    
+                    <input type="radio" class="btn-check" name="pipelineSelect" id="azurePipeline" value="azure">
+                    <label class="btn btn-outline-light" for="azurePipeline">
+                        <i class="fab fa-microsoft"></i> Azure
+                    </label>
+                </div>
+                <small class="text-white-50 mt-1 d-block">
+                    <span id="pipelineBadge" class="badge bg-primary">Classic OpenAI</span>
+                </small>
+            </div>
+            
             <!-- Index Selection -->
             <div class="mb-3">
                 <label for="indexSelect" class="form-label text-white">Index Name</label>
@@ -252,9 +273,13 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script>
+// Global pipeline state
+let currentPipeline = 'classic'; // 'classic' or 'azure'
+
 // Utility functions in outer scope
 function displayUploadResults(response, type) {
     let resultsDiv = $('#uploadResults');
@@ -418,9 +443,33 @@ globalThis.setQuestion = function(element) {
     $('#questionInput').val($(element).text().trim());
 }
 
+function updatePipelineBadge() {
+    const badge = $('#pipelineBadge');
+    if (currentPipeline === 'azure') {
+        badge.removeClass('bg-primary').addClass('bg-info');
+        badge.html('<i class="fab fa-microsoft"></i> Azure AI');
+    } else {
+        badge.removeClass('bg-info').addClass('bg-primary');
+        badge.html('<i class="fas fa-server"></i> Classic OpenAI');
+    }
+}
+
+function getApiEndpoint(endpoint) {
+    // Map endpoints to their Azure or classic versions
+    const endpointMap = {
+        'upload': currentPipeline === 'azure' ? '/api/azure/upload-documents/' : '/api/upload-documents/',
+        'query': currentPipeline === 'azure' ? '/api/azure/query/' : '/api/query/',
+        'conversational': currentPipeline === 'azure' ? '/api/azure/conversational-query/' : '/api/conversational-query/',
+        'stats': currentPipeline === 'azure' ? '/api/azure/index-stats/' : '/api/index-stats/',
+        'clear-conversation': currentPipeline === 'azure' ? '/api/azure/clear-conversation/' : '/api/conversation/',
+        'clear-documents': currentPipeline === 'azure' ? '/api/azure/clear-cache/' : '/api/clear-documents/'
+    };
+    return endpointMap[endpoint] || endpoint;
+}
+
 function clearConversation() {
     $.ajax({
-        url: '/api/conversation/',
+        url: getApiEndpoint('clear-conversation'),
         type: 'DELETE',
         headers: {
             'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
@@ -442,7 +491,7 @@ function clearAllDocuments(currentIndexName) {
     $('#clearDocuments').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
     
     $.ajax({
-        url: '/api/clear-documents/',
+        url: getApiEndpoint('clear-documents'),
         type: 'DELETE',
         data: { index_name: currentIndexName },
         headers: {
@@ -519,6 +568,13 @@ $(document).ready(function() {
             loadIndexStats();
         });
         
+        // Pipeline switching
+        $('input[name="pipelineSelect"]').on('change', function() {
+            currentPipeline = $(this).val();
+            updatePipelineBadge();
+            loadIndexStats();
+        });
+        
         // Actions
         $('#refreshStats').on('click', loadIndexStats);
         $('#clearConversation').on('click', clearConversation);
@@ -576,7 +632,7 @@ $(document).ready(function() {
         $('#uploadBtn').prop('disabled', true);
         
         $.ajax({
-            url: '/api/upload-documents/',
+            url: getApiEndpoint('upload'),
             type: 'POST',
             data: formData,
             processData: false,
@@ -636,8 +692,8 @@ $(document).ready(function() {
             include_scores: $('#includeScores').is(':checked')
         };
         
-        let endpoint = $('#conversationalMode').is(':checked') ? 
-                      '/api/conversational-query/' : '/api/query/';
+        let endpointType = $('#conversationalMode').is(':checked') ? 'conversational' : 'query';
+        let endpoint = getApiEndpoint(endpointType);
         
         $('#queryProgress').show();
         $('#askBtn').prop('disabled', true);
@@ -670,7 +726,7 @@ $(document).ready(function() {
     
     function loadIndexStats() {
         $.ajax({
-            url: '/api/index-stats/',
+            url: getApiEndpoint('stats'),
             type: 'GET',
             data: { index_name: currentIndexName },
             success: function(response) {

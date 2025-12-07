@@ -2,12 +2,14 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
 [![Django](https://img.shields.io/badge/django-5.0%2B-green)](https://www.djangoproject.com/)
+[![Azure](https://img.shields.io/badge/azure-enabled-0078D4)](https://azure.microsoft.com/)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-A Django-based document Q&A system using Retrieval-Augmented Generation (RAG) to process and query large documents with AI-powered responses.
+A Django-based document Q&A system using Retrieval-Augmented Generation (RAG) to process and query large documents with AI-powered responses. Features both standard OpenAI integration and **enterprise-ready Azure RAG pipeline**.
 
 ## ✨ Features
 
+### Core Features
 - **Django Web Interface**: Modern Bootstrap UI with admin panel
 - **Large Document Support**: Handle documents up to 800k+ words
 - **Multiple Formats**: PDF, DOCX, TXT, and Markdown support
@@ -22,11 +24,46 @@ A Django-based document Q&A system using Retrieval-Augmented Generation (RAG) to
   - Smart output hedging for uncertain answers
   - Configurable coherence thresholds and fallback strategies
 
+### Azure RAG Pipeline (New! - Experimental)
+
+#### Azure Services Integration
+- **Azure OpenAI**: Embeddings (Ada-002) and Chat Completion (GPT-4)
+- **Azure AI Search**: Vector search with hybrid (vector + keyword) and semantic ranking
+- **Azure Document Intelligence**: Advanced document processing with layout analysis, table extraction, and OCR
+- **Azure Key Vault**: Secure secrets management (optional)
+- **Azure Storage**: Document storage with blob containers (optional)
+
+#### Features
+- **Managed Identity Authentication**: Secure, credential-free authentication for Azure-hosted apps
+- **Automatic Retry Logic**: Exponential backoff for transient failures
+- **Query Result Caching**: In-memory cache with configurable TTL
+- **Hybrid Search**: Combines vector similarity with keyword search for better accuracy
+- **Semantic Ranking**: Azure AI Search semantic ranking for improved relevance
+- **Performance Monitoring**: Built-in metrics and logging
+- **Error Handling**: Comprehensive error handling and recovery
+- **Health Checks**: Validation endpoints for all Azure services
+
+#### Authentication Options
+1. **Managed Identity** (Production - Recommended):
+   - No credentials in code or environment
+   - Automatic credential rotation
+   - Azure RBAC for fine-grained access control
+   
+2. **Service Principal** (CI/CD):
+   - Client ID, Secret, and Tenant ID
+   - Suitable for deployment pipelines
+   
+3. **API Keys** (Development):
+   - Simple setup for local development
+   - Not recommended for production
+
 ## 🚀 Quick Start
 
 ### Requirements
 - Python 3.8+
-- OpenAI API key
+- **For Standard Pipeline**: OpenAI API key
+- **For Azure Pipeline**: Azure subscription with OpenAI, AI Search, and Document Intelligence resources
+
 ### Installation
 
 1. **Clone the repository**:
@@ -53,8 +90,14 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Edit .env with your OpenAI API key
+# Edit .env with your API keys and Azure configuration
 ```
+
+**For Standard Pipeline (OpenAI)**:
+- Set `OPENAI_API_KEY` in `.env`
+
+**For Azure Pipeline**:
+- Set Azure service endpoints and credentials
 
 5. **Run setup and start server**:
 
