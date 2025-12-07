@@ -23,8 +23,9 @@ from src.az_rag_engine import get_azure_rag_engine, ConversationalAzureRAG
 
 sys.path.append(str(Path(__file__).parent.parent / 'src'))
 
-# Import Azure RAG engine
 
+# Constants
+INTERNAL_ERROR_MESSAGE = 'An internal error occurred.'
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AzureDocumentUploadView(APIView):
@@ -102,7 +103,7 @@ class AzureDocumentUploadView(APIView):
         except Exception as e:
             logger.error(f"Document upload failed: {e}")
             return Response(
-                {'error': 'An internal error has occurred.'},
+                {'error': INTERNAL_ERROR_MESSAGE},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -184,7 +185,7 @@ class AzureQueryView(APIView):
         except Exception as e:
             logger.error(f"Azure query failed: {e}")
             return Response(
-                {'error': 'An internal error has occurred.'},
+                {'error': INTERNAL_ERROR_MESSAGE},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -274,7 +275,7 @@ class AzureConversationalQueryView(APIView):
         except Exception as e:
             logger.error(f"Azure conversational query failed: {e}")
             return Response(
-                {'error': 'An internal error occurred.'},
+                {'error': INTERNAL_ERROR_MESSAGE},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -308,7 +309,7 @@ def azure_index_stats(request):
     except Exception as e:
         logger.error(f"Failed to get Azure stats: {e}")
         return JsonResponse(
-            {'error': 'An internal error occurred.'},
+            {'error': INTERNAL_ERROR_MESSAGE},
             status=500
         )
 
@@ -343,7 +344,7 @@ def azure_clear_cache(request):
     except Exception as e:
         logger.error(f"Failed to clear Azure cache: {e}")
         return JsonResponse(
-            {'error': 'An internal error occurred.'},
+            {'error': INTERNAL_ERROR_MESSAGE},
             status=500
         )
 
@@ -384,7 +385,7 @@ def azure_clear_conversation(request):
     except Exception as e:
         logger.error(f"Failed to clear Azure conversation: {e}")
         return JsonResponse(
-            {'error': 'An internal error occurred.'},
+            {'error': INTERNAL_ERROR_MESSAGE},
             status=500
         )
 
@@ -428,10 +429,10 @@ def azure_health_check(request):
             'missing_config': validation['missing_config'],
         }, status=http_status)
 
-    except Exception as e:
-        logger.exception("Azure health check failed")  # log full stack trace
+    except Exception as _e:
+        logger.exception("Azure health check failed")
         return JsonResponse({
             'status': 'unhealthy',
-            'error': 'An internal error occurred.',
+            'error': INTERNAL_ERROR_MESSAGE,
             'pipeline': 'azure',
         }, status=503)

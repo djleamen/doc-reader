@@ -94,69 +94,92 @@ class AzureDocumentProcessor:
                 f"Analyzing document: {file_path} with model: {model_id}")
             start_time = time.time()
 
-            # Read file
-            with open(file_path, "rb") as f:
-                file_content = f.read()
-
-            # Analyze document
-            poller = self.client.begin_analyze_document(
-                model_id=model_id,
-                document=file_content
-            )
-            result = poller.result()
+            # Read file and analyze
+            result = self._analyze_document_with_client(file_path, model_id)
 
             elapsed_time = time.time() - start_time
             logger.info(f"Document analyzed in {elapsed_time:.2f}s")
 
-            # Extract structured data
-            analyzed_data = {
-                "pages": len(result.pages),
-                "paragraphs": len(result.paragraphs) if hasattr(result, 'paragraphs') and result.paragraphs is not None else 0,
-                "tables": len(result.tables) if hasattr(result, 'tables') and result.tables is not None else 0,
-                "key_value_pairs": len(result.key_value_pairs) if hasattr(result, 'key_value_pairs') and result.key_value_pairs is not None else 0,
-                "content": result.content,
-                "pages_detail": [],
-                "tables_detail": [],
-            }
-
-            # Extract page details
-            for page in result.pages:
-                page_data = {
-                    "page_number": page.page_number,
-                    "width": page.width,
-                    "height": page.height,
-                    "unit": page.unit,
-                    "lines": len(page.lines) if hasattr(page, 'lines') else 0,
-                    "words": len(page.words) if hasattr(page, 'words') else 0,
-                }
-                analyzed_data["pages_detail"].append(page_data)
-
-            # Extract tables
-            if hasattr(result, 'tables') and result.tables is not None:
-                for table_idx, table in enumerate(result.tables):
-                    table_data = {
-                        "table_id": table_idx,
-                        "row_count": table.row_count,
-                        "column_count": table.column_count,
-                        "cells": [],
-                    }
-
-                    for cell in table.cells:
-                        cell_data = {
-                            "row_index": cell.row_index,
-                            "column_index": cell.column_index,
-                            "content": cell.content,
-                            "is_header": cell.kind == "columnHeader" if hasattr(cell, 'kind') else False,
-                        }
-                        table_data["cells"].append(cell_data)
-
-                    analyzed_data["tables_detail"].append(table_data)
+            # Build structured result
+            analyzed_data = self._build_analyzed_data(result)
 
             return analyzed_data
 
         except Exception as e:
             logger.error(f"Failed to analyze document: {e}")
             raise
+
+    def _analyze_document_with_client(self, file_path: str, model_id: str) -> Any:
+        """Read file and analyze with Azure Document Intelligence client."""
+        if self.client is None:
+            raise ValueError(
+                "Azure Document Intelligence client is not initialized")
+
+        with open(file_path, "rb") as f:
+            file_content = f.read()
+
+        poller = self.client.begin_analyze_document(
+            model_id=model_id,
+            document=file_content
+        )
+        return poller.result()
+
+    def _build_analyzed_data(self, result: Any) -> Dict[str, Any]:
+        """Build structured data dictionary from analysis result."""
+        analyzed_data = {
+            "pages": len(result.pages),
+            "paragraphs": len(result.paragraphs) if hasattr(result, 'paragraphs') and result.paragraphs is not None else 0,
+            "tables": len(result.tables) if hasattr(result, 'tables') and result.tables is not None else 0,
+            "key_value_pairs": len(result.key_value_pairs) if hasattr(result, 'key_value_pairs') and result.key_value_pairs is not None else 0,
+            "content": result.content,
+            "pages_detail": self._extract_pages_detail(result.pages),
+            "tables_detail": self._extract_tables_detail(result),
+        }
+        return analyzed_data
+
+    def _extract_pages_detail(self, pages: List[Any]) -> List[Dict[str, Any]]:
+        """Extract detailed information from pages."""
+        pages_detail = []
+        for page in pages:
+            page_data = {
+                "page_number": page.page_number,
+                "width": page.width,
+                "height": page.height,
+                "unit": page.unit,
+                "lines": len(page.lines) if hasattr(page, 'lines') else 0,
+                "words": len(page.words) if hasattr(page, 'words') else 0,
+            }
+            pages_detail.append(page_data)
+        return pages_detail
+
+    def _extract_tables_detail(self, result: Any) -> List[Dict[str, Any]]:
+        """Extract detailed information from tables."""
+        tables_detail = []
+        if hasattr(result, 'tables') and result.tables is not None:
+            for table_idx, table in enumerate(result.tables):
+                table_data = self._build_table_data(table_idx, table)
+                tables_detail.append(table_data)
+        return tables_detail
+
+    def _build_table_data(self, table_idx: int, table: Any) -> Dict[str, Any]:
+        """Build table data structure with cells."""
+        table_data = {
+            "table_id": table_idx,
+            "row_count": table.row_count,
+            "column_count": table.column_count,
+            "cells": [],
+        }
+
+        for cell in table.cells:
+            cell_data = {
+                "row_index": cell.row_index,
+                "column_index": cell.column_index,
+                "content": cell.content,
+                "is_header": cell.kind == "columnHeader" if hasattr(cell, 'kind') else False,
+            }
+            table_data["cells"].append(cell_data)
+
+        return table_data
 
     def extract_text(self, file_path: str) -> str:
         """

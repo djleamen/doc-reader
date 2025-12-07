@@ -82,53 +82,65 @@ class AzureOpenAIService:
             Function result
         """
         max_retries = self.settings.max_retries
-        retry_delay = self.settings.retry_delay
 
         for attempt in range(max_retries):
             try:
                 return func(*args, **kwargs)
             except RateLimitError as e:
-                # Handle OpenAI rate limit errors
-                wait_time = 60
-                logger.warning(
-                    f"Rate limit reached (attempt {attempt + 1}/{max_retries}): {e}. "
-                    f"Waiting {wait_time}s before retry..."
-                )
-                time.sleep(wait_time)
-
-                if attempt == max_retries - 1:
-                    logger.error(
-                        f"Max retries reached after rate limiting: {e}")
-                    raise
+                self._handle_rate_limit_error(e, attempt, max_retries)
             except (AzureError, APIError) as e:
-                # Check for rate limit in error message
-                error_str = str(e)
-                if "429" in error_str or "RateLimitReached" in error_str:
-                    wait_time = 60
-                    logger.warning(
-                        f"Rate limit detected (attempt {attempt + 1}/{max_retries}). "
-                        f"Waiting {wait_time}s before retry..."
-                    )
-                    time.sleep(wait_time)
-                else:
-                    if attempt == max_retries - 1:
-                        logger.error(f"Max retries reached. Last error: {e}")
-                        raise
-
-                    wait_time = retry_delay * (2 ** attempt)
-                    logger.warning(
-                        f"Attempt {attempt + 1} failed: {e}. "
-                        f"Retrying in {wait_time}s..."
-                    )
-                    time.sleep(wait_time)
-
-                if attempt == max_retries - 1:
-                    logger.error(
-                        f"Max retries reached after {max_retries} attempts")
-                    raise
+                self._handle_azure_api_error(e, attempt, max_retries)
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
                 raise
+
+    def _handle_rate_limit_error(self, error: RateLimitError, attempt: int, max_retries: int) -> None:
+        """Handle OpenAI rate limit errors with retry logic."""
+        wait_time = 60
+        logger.warning(
+            f"Rate limit reached (attempt {attempt + 1}/{max_retries}): {error}. "
+            f"Waiting {wait_time}s before retry..."
+        )
+        time.sleep(wait_time)
+
+        if attempt == max_retries - 1:
+            logger.error(f"Max retries reached after rate limiting: {error}")
+            raise error
+
+    def _handle_azure_api_error(self, error: Exception, attempt: int, max_retries: int) -> None:
+        """Handle Azure API errors with exponential backoff or rate limit handling."""
+        error_str = str(error)
+
+        if "429" in error_str or "RateLimitReached" in error_str:
+            self._handle_rate_limit_in_error(error, attempt, max_retries)
+        else:
+            self._handle_retriable_error(error, attempt, max_retries)
+
+    def _handle_rate_limit_in_error(self, error: Exception, attempt: int, max_retries: int) -> None:
+        """Handle rate limit detected in error message."""
+        wait_time = 60
+        logger.warning(
+            f"Rate limit detected (attempt {attempt + 1}/{max_retries}). "
+            f"Waiting {wait_time}s before retry..."
+        )
+        time.sleep(wait_time)
+
+        if attempt == max_retries - 1:
+            logger.error(f"Max retries reached after {max_retries} attempts")
+            raise error
+
+    def _handle_retriable_error(self, error: Exception, attempt: int, max_retries: int) -> None:
+        """Handle retriable errors with exponential backoff."""
+        if attempt == max_retries - 1:
+            logger.error(f"Max retries reached. Last error: {error}")
+            raise error
+
+        wait_time = self.settings.retry_delay * (2 ** attempt)
+        logger.warning(
+            f"Attempt {attempt + 1} failed: {error}. "
+            f"Retrying in {wait_time}s..."
+        )
+        time.sleep(wait_time)
 
     def get_embeddings(self, texts: List[str], batch_size: int = 20) -> List[List[float]]:
         """

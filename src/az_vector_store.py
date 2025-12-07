@@ -6,7 +6,7 @@ Supports hybrid search (vector + keyword) and semantic ranking.
 import json
 import time
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
@@ -29,6 +29,9 @@ from loguru import logger
 
 from src.az_config import azure_settings
 from src.az_openai_service import get_azure_openai_service
+
+# Constants
+_SEARCH_CLIENT_NOT_INITIALIZED = "Search client not initialized"
 
 
 class AzureSearchVectorStore:
@@ -240,7 +243,7 @@ class AzureSearchVectorStore:
             return {"status": "success", "count": 0}
 
         if not self.search_client:
-            raise RuntimeError("Search client not initialized")
+            raise RuntimeError(_SEARCH_CLIENT_NOT_INITIALIZED)
 
         try:
             logger.info(
@@ -268,7 +271,7 @@ class AzureSearchVectorStore:
                     "source": doc.metadata.get("source", "unknown"),
                     "metadata": json.dumps(doc.metadata),
                     "chunk_id": doc.metadata.get("chunk_id", i),
-                    "created_at": datetime.utcnow().isoformat() + "Z",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                 }
                 search_documents.append(search_doc)
 
@@ -324,7 +327,7 @@ class AzureSearchVectorStore:
             List of matching documents
         """
         if not self.search_client:
-            raise RuntimeError("Search client not initialized")
+            raise RuntimeError(_SEARCH_CLIENT_NOT_INITIALIZED)
 
         try:
             logger.info(f"Searching for: '{query}' (k={k})")
@@ -394,7 +397,7 @@ class AzureSearchVectorStore:
             Dict with deletion status
         """
         if not self.search_client:
-            raise RuntimeError("Search client not initialized")
+            raise RuntimeError(_SEARCH_CLIENT_NOT_INITIALIZED)
 
         try:
             logger.info("Starting document deletion")
@@ -436,7 +439,7 @@ class AzureSearchVectorStore:
             Dict with index stats
         """
         if not self.search_client:
-            raise RuntimeError("Search client not initialized")
+            raise RuntimeError(_SEARCH_CLIENT_NOT_INITIALIZED)
 
         try:
             # Get document count

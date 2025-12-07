@@ -9,11 +9,11 @@
             <h5 class="text-white"><i class="fas fa-cog"></i> Configuration</h5>
             
             <!-- Pipeline Selection -->
-            <div class="mb-4">
-                <label class="form-label text-white d-flex align-items-center">
+            <fieldset class="mb-4">
+                <legend class="form-label text-white d-flex align-items-center">
                     <i class="fas fa-cloud me-2"></i> RAG Pipeline
-                </label>
-                <div class="btn-group w-100" role="group" aria-label="Pipeline selection">
+                </legend>
+                <div class="btn-group w-100">
                     <input type="radio" class="btn-check" name="pipelineSelect" id="classicPipeline" value="classic" checked>
                     <label class="btn btn-outline-light" for="classicPipeline">
                         <i class="fas fa-server"></i> Classic
@@ -27,7 +27,7 @@
                 <small class="text-white-50 mt-1 d-block">
                     <span id="pipelineBadge" class="badge bg-primary">Classic OpenAI</span>
                 </small>
-            </div>
+            </fieldset>
             
             <!-- Index Selection -->
             <div class="mb-3">
