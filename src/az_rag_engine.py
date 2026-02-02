@@ -1,6 +1,8 @@
 """
 Experimental Azure RAG Engine with advanced features.
 Combines Azure OpenAI, AI Search, and Document Intelligence.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import time
@@ -19,7 +21,10 @@ from src.az_document_processor import get_azure_document_processor
 
 @dataclass
 class AzureQueryResult:
-    """Result from Azure RAG query."""
+    '''
+    Result of a query to the Azure RAG system.
+    Contains the answer, source documents, query details, and metadata.
+    '''
     answer: str
     sources: List[Dict[str, Any]]
     query: str
@@ -34,27 +39,47 @@ class QueryCache:
     """Simple in-memory cache for query results."""
 
     def __init__(self, ttl: int = 3600):
-        """
-        Initialize query cache.
-
-        Args:
-            ttl: Time to live in seconds
-        """
+        '''
+        Initialize query cache with time-to-live (TTL).
+        
+        :param self: QueryCache instance
+        :param ttl: Time to live in seconds for cached results
+        :type ttl: int
+        '''
         self.cache: Dict[str, tuple[AzureQueryResult, datetime]] = {}
         self.ttl = ttl
 
     def _generate_key(self, query: str, index_name: str, k: int) -> str:
-        """
-        Generate cache key from query parameters.
+        '''
+        Generate a unique cache key based on query parameters.
         
-        Note: Uses SHA256 for cache key generation (non-security purpose).
-        This is not for cryptographic security, just consistent key generation.
-        """
+        :param self: QueryCache instance
+        :param query: Query string
+        :type query: str
+        :param index_name: Name of the search index
+        :type index_name: str
+        :param k: Number of results to retrieve
+        :type k: int
+        :return: Unique cache key as SHA256 hash string
+        :rtype: str
+        '''
         key_string = f"{query}:{index_name}:{k}"
         return hashlib.sha256(key_string.encode()).hexdigest()
 
     def get(self, query: str, index_name: str, k: int) -> Optional[AzureQueryResult]:
-        """Get cached result if available and not expired."""
+        '''
+        Retrieve cached query result if valid.
+        
+        :param self: QueryCache instance
+        :param query: Query string
+        :type query: str
+        :param index_name: Name of the search index
+        :type index_name: str
+        :param k: Number of results to retrieve
+        :type k: int
+        :return: Cached AzureQueryResult if found and valid, None otherwise
+        :rtype: AzureQueryResult | None
+        '''
         key = self._generate_key(query, index_name, k)
 
         if key in self.cache:
@@ -70,12 +95,28 @@ class QueryCache:
         return None
 
     def set(self, query: str, index_name: str, k: int, result: AzureQueryResult) -> None:
-        """Cache query result."""
+        '''
+        Cache query result.
+        
+        :param self: QueryCache instance
+        :param query: Query string
+        :type query: str
+        :param index_name: Name of the search index
+        :type index_name: str
+        :param k: Number of results to retrieve
+        :type k: int
+        :param result: AzureQueryResult to cache
+        :type result: AzureQueryResult
+        '''
         key = self._generate_key(query, index_name, k)
         self.cache[key] = (result, datetime.now())
 
     def clear(self) -> None:
-        """Clear all cached results."""
+        '''
+        Clear all cached results.
+        
+        :param self: QueryCache instance
+        '''
         self.cache.clear()
         logger.info("Query cache cleared")
 
@@ -92,12 +133,13 @@ class AzureRAGEngine:
     """
 
     def __init__(self, index_name: Optional[str] = None):
-        """
-        Initialize Azure RAG Engine.
-
-        Args:
-            index_name: Name of the search index
-        """
+        '''
+        Initialize Azure RAG engine.
+        
+        :param self: AzureRAGEngine instance
+        :param index_name: Name of the search index, uses default from settings if None
+        :type index_name: Optional[str]
+        '''
         self.settings = azure_settings
         self.index_name = index_name or self.settings.search_index_name
 
@@ -114,15 +156,15 @@ class AzureRAGEngine:
             f"Azure RAG Engine initialized with index: {self.index_name}")
 
     def add_document(self, file_path: str) -> Dict[str, Any]:
-        """
-        Add a document to the RAG system.
-
-        Args:
-            file_path: Path to document file
-
-        Returns:
-            Dict with status and document info
-        """
+        '''
+        Add and process a document to the RAG system.
+        
+        :param self: AzureRAGEngine instance
+        :param file_path: Path to document file to process and add
+        :type file_path: str
+        :return: Dictionary with status, document info, and processing metrics
+        :rtype: Dict[str, Any]
+        '''
         try:
             logger.info(f"Adding document: {file_path}")
             start_time = time.time()
@@ -160,20 +202,25 @@ class AzureRAGEngine:
         temperature: Optional[float] = None,
         include_sources: bool = True,
     ) -> AzureQueryResult:
-        """
-        Query the RAG system.
-
-        Args:
-            question: User question
-            k: Number of documents to retrieve
-            use_hybrid: Use hybrid search (vector + keyword)
-            use_semantic: Use semantic ranking
-            temperature: LLM temperature
-            include_sources: Include source documents in result
-
-        Returns:
-            AzureQueryResult with answer and sources
-        """
+        '''
+        Process a query using the RAG engine.
+        
+        :param self: AzureRAGEngine instance
+        :param question: User question to answer
+        :type question: str
+        :param k: Number of documents to retrieve, uses default if None
+        :type k: Optional[int]
+        :param use_hybrid: Use hybrid search (vector + keyword), uses default if None
+        :type use_hybrid: Optional[bool]
+        :param use_semantic: Use semantic ranking, uses default if None
+        :type use_semantic: Optional[bool]
+        :param temperature: LLM temperature for answer generation
+        :type temperature: Optional[float]
+        :param include_sources: Include source documents in result
+        :type include_sources: bool
+        :return: Description
+        :rtype: AzureQueryResult
+        '''
         try:
             logger.info(f"Processing query: '{question}'")
             start_time = time.time()
@@ -256,15 +303,15 @@ class AzureRAGEngine:
             raise
 
     def _build_context(self, documents: List[Document]) -> str:
-        """
+        '''
         Build context string from retrieved documents.
-
-        Args:
-            documents: Retrieved documents
-
-        Returns:
-            Context string
-        """
+        
+        :param self: AzureRAGEngine instance
+        :param documents: List of retrieved LangChain documents
+        :type documents: List[Document]
+        :return: Formatted context string with document content and metadata
+        :rtype: str
+        '''
         context_parts = []
 
         for i, doc in enumerate(documents, 1):
@@ -278,17 +325,22 @@ class AzureRAGEngine:
         return "\n\n---\n\n".join(context_parts)
 
     def clear_cache(self) -> None:
-        """Clear query result cache."""
+        '''
+        Clear the query result cache.
+        
+        :param self: AzureRAGEngine instance
+        '''
         if self.cache:
             self.cache.clear()
 
     def get_stats(self) -> Dict[str, Any]:
-        """
-        Get RAG engine statistics.
-
-        Returns:
-            Dict with engine stats
-        """
+        '''
+        Get statistics about the RAG engine and vector store.
+        
+        :param self: AzureRAGEngine instance
+        :return: Dictionary with engine stats including document count, cache info, and model details
+        :rtype: Dict[str, Any]
+        '''
         try:
             vector_store_stats = self.vector_store.get_stats()
 
@@ -310,12 +362,13 @@ class AzureRAGEngine:
             raise
 
     def validate_configuration(self) -> Dict[str, Any]:
-        """
-        Validate Azure services configuration and connectivity.
-
-        Returns:
-            Dict with validation results
-        """
+        '''
+        Validate the RAG engine configuration and connections.
+        
+        :param self: AzureRAGEngine instance
+        :return: Dictionary with validation results for each service and missing config items
+        :rtype: Dict[str, Any]
+        '''
         results = {
             "configuration_valid": False,
             "openai_connection": False,
@@ -362,7 +415,13 @@ class ConversationalAzureRAG(AzureRAGEngine):
     """
 
     def __init__(self, index_name: Optional[str] = None):
-        """Initialize conversational RAG engine."""
+        '''
+        Docstring for ConversationalAzureRAG initializer.
+       
+        :param self: ConversationalAzureRAG instance
+        :param index_name: Name of the search index, uses default from settings if None
+        :type index_name: Optional[str]
+        '''
         super().__init__(index_name=index_name)
         self.conversation_history: List[Dict[str, str]] = []
         logger.info("Conversational Azure RAG Engine initialized")
@@ -376,20 +435,25 @@ class ConversationalAzureRAG(AzureRAGEngine):
         temperature: Optional[float] = None,
         include_sources: bool = True,
     ) -> AzureQueryResult:
-        """
-        Query with conversation history.
-
-        Args:
-            question: User question
-            k: Number of documents to retrieve
-            use_hybrid: Use hybrid search
-            use_semantic: Use semantic ranking
-            temperature: LLM temperature
-            include_sources: Include source documents
-
-        Returns:
-            AzureQueryResult with answer
-        """
+        '''
+        Process a conversational query with history.
+        
+        :param self: ConversationalAzureRAG instance
+        :param question: User question to answer
+        :type question: str
+        :param k: Number of documents to retrieve
+        :type k: Optional[int]
+        :param use_hybrid: Use hybrid search (vector + keyword)
+        :type use_hybrid: Optional[bool]
+        :param use_semantic: Use semantic ranking
+        :type use_semantic: Optional[bool]
+        :param temperature: LLM temperature for answer generation
+        :type temperature: Optional[float]
+        :param include_sources: Include source documents in result
+        :type include_sources: bool
+        :return: AzureQueryResult with answer considering conversation history
+        :rtype: AzureQueryResult
+        '''
         try:
             # Get base result
             result = self.query(
@@ -422,17 +486,22 @@ class ConversationalAzureRAG(AzureRAGEngine):
             raise
 
     def clear_history(self) -> None:
-        """Clear conversation history."""
+        '''
+        Clear the conversation history.
+        
+        :param self: ConversationalAzureRAG instance
+        '''
         self.conversation_history.clear()
         logger.info("Conversation history cleared")
 
     def get_history(self) -> List[Dict[str, str]]:
-        """
-        Get conversation history.
-
-        Returns:
-            List of conversation messages
-        """
+        '''
+        Get the current conversation history.
+        
+        :param self: ConversationalAzureRAG instance
+        :return: Current conversation history as a list of messages
+        :rtype: List[Dict[str, str]]
+        '''
         return self.conversation_history.copy()
 
 
@@ -441,16 +510,16 @@ _azure_rag_engines: Dict[str, AzureRAGEngine] = {}
 
 
 def get_azure_rag_engine(index_name: Optional[str] = None, conversational: bool = False) -> AzureRAGEngine:
-    """
-    Get or create Azure RAG engine instance.
-
-    Args:
-        index_name: Name of the search index
-        conversational: Whether to use conversational RAG
-
-    Returns:
-        AzureRAGEngine instance
-    """
+    '''
+    Get or create a cached Azure RAG engine instance.
+    
+    :param index_name: Name of the search index to use
+    :type index_name: Optional[str]
+    :param conversational: Whether to use conversational RAG with history
+    :type conversational: bool
+    :return: AzureRAGEngine or ConversationalAzureRAG instance
+    :rtype: AzureRAGEngine
+    '''
     index_name = index_name or azure_settings.search_index_name
     cache_key = f"{index_name}:{'conv' if conversational else 'std'}"
 

@@ -1,6 +1,8 @@
 """
 Azure OpenAI service for embeddings and chat completions.
 Uses Managed Identity for secure authentication.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import time
@@ -25,16 +27,21 @@ class AzureOpenAIService:
     """
 
     def __init__(self):
-        """Initialize Azure OpenAI client with proper authentication."""
+        '''
+        Initialize Azure OpenAI service.
+        
+        :param self: AzureOpenAIService instance
+        '''
         self.settings = azure_settings
         self.client: AzureOpenAI
         self._initialize_client()
 
     def _initialize_client(self) -> None:
-        """
-        Initialize Azure OpenAI client with appropriate authentication.
-        Uses Managed Identity when available, falls back to API key.
-        """
+        '''
+        Initialize Azure OpenAI client with authentication.
+        
+        :param self: AzureOpenAIService instance
+        '''
         try:
             if self.settings.use_managed_identity:
                 # Use Managed Identity (recommended for production)
@@ -70,17 +77,16 @@ class AzureOpenAIService:
             raise
 
     def _retry_with_backoff(self, func, *args, **kwargs) -> Any:
-        """
-        Execute function with exponential backoff retry logic.
-
-        Args:
-            func: Function to execute
-            *args: Function arguments
-            **kwargs: Function keyword arguments
-
-        Returns:
-            Function result
-        """
+        '''
+        Retry function with exponential backoff on rate limit and retriable errors.
+        
+        :param self: AzureOpenAIService instance
+        :param func: Function to execute with retry logic
+        :param args: Positional arguments to pass to function
+        :param kwargs: Keyword arguments to pass to function
+        :return: Result from successful function execution
+        :rtype: Any
+        '''
         max_retries = self.settings.max_retries
 
         for attempt in range(max_retries):
@@ -94,8 +100,19 @@ class AzureOpenAIService:
                 logger.error(f"Unexpected error: {e}")
                 raise
 
-    def _handle_rate_limit_error(self, error: RateLimitError, attempt: int, max_retries: int) -> None:
-        """Handle OpenAI rate limit errors with retry logic."""
+    def _handle_rate_limit_error(self, error: RateLimitError, 
+                                 attempt: int, max_retries: int) -> None:
+        '''
+        Handle rate limit errors with fixed wait time.
+        
+        :param self: AzureOpenAIService instance
+        :param error: RateLimitError instance
+        :type error: RateLimitError
+        :param attempt: Current retry attempt number
+        :type attempt: int
+        :param max_retries: Maximum number of retry attempts
+        :type max_retries: int
+        '''
         wait_time = 60
         logger.warning(
             f"Rate limit reached (attempt {attempt + 1}/{max_retries}): {error}. "
@@ -107,8 +124,19 @@ class AzureOpenAIService:
             logger.error(f"Max retries reached after rate limiting: {error}")
             raise error
 
-    def _handle_azure_api_error(self, error: Exception, attempt: int, max_retries: int) -> None:
-        """Handle Azure API errors with exponential backoff or rate limit handling."""
+    def _handle_azure_api_error(self, error: Exception, attempt: int, 
+                                max_retries: int) -> None:
+        '''
+        Handle Azure API errors with exponential backoff or rate limit handling.
+        
+        :param self: AzureOpenAIService instance
+        :param error: Exception from Azure API
+        :type error: Exception
+        :param attempt: Current retry attempt number
+        :type attempt: int
+        :param max_retries: Maximum number of retry attempts
+        :type max_retries: int
+        '''
         error_str = str(error)
 
         if "429" in error_str or "RateLimitReached" in error_str:
@@ -117,7 +145,17 @@ class AzureOpenAIService:
             self._handle_retriable_error(error, attempt, max_retries)
 
     def _handle_rate_limit_in_error(self, error: Exception, attempt: int, max_retries: int) -> None:
-        """Handle rate limit detected in error message."""
+        '''
+        Handle rate limit errors detected in generic exceptions.
+        
+        :param self: AzureOpenAIService instance
+        :param error: Exception from Azure API
+        :type error: Exception
+        :param attempt: Current retry attempt number
+        :type attempt: int
+        :param max_retries: Maximum number of retry attempts
+        :type max_retries: int
+        '''
         wait_time = 60
         logger.warning(
             f"Rate limit detected (attempt {attempt + 1}/{max_retries}). "
@@ -130,7 +168,17 @@ class AzureOpenAIService:
             raise error
 
     def _handle_retriable_error(self, error: Exception, attempt: int, max_retries: int) -> None:
-        """Handle retriable errors with exponential backoff."""
+        '''
+        Handle retriable errors with exponential backoff.
+        
+        :param self: AzureOpenAIService instance
+        :param error: Exception from Azure API
+        :type error: Exception
+        :param attempt: Current retry attempt number
+        :type attempt: int
+        :param max_retries: Maximum number of retry attempts
+        :type max_retries: int
+        '''
         if attempt == max_retries - 1:
             logger.error(f"Max retries reached. Last error: {error}")
             raise error
@@ -142,18 +190,19 @@ class AzureOpenAIService:
         )
         time.sleep(wait_time)
 
-    def get_embeddings(self, texts: List[str], batch_size: int = 20) -> List[List[float]]:
-        """
-        Generate embeddings for text using Azure OpenAI.
-        Processes in batches to avoid rate limits.
-
-        Args:
-            texts: List of text strings to embed
-            batch_size: Number of texts to process per batch (default: 20 for S0 tier)
-
-        Returns:
-            List of embedding vectors
-        """
+    def get_embeddings(self, texts: List[str], 
+                       batch_size: int = 20) -> List[List[float]]:
+        '''
+        Generate embeddings for a list of texts.
+        
+        :param self: AzureOpenAIService instance
+        :param texts: List of text strings to embed
+        :type texts: List[str]
+        :param batch_size: Number of texts to process per batch (default: 20 for S0 tier)
+        :type batch_size: int
+        :return: List of embedding vectors (1536-dimensional for Ada-002)
+        :rtype: List[List[float]]
+        '''
         if not texts:
             return []
 
@@ -202,15 +251,15 @@ class AzureOpenAIService:
             raise
 
     def get_embedding(self, text: str) -> List[float]:
-        """
+        '''
         Generate embedding for a single text.
-
-        Args:
-            text: Text to embed
-
-        Returns:
-            Embedding vector
-        """
+        
+        :param self: AzureOpenAIService instance
+        :param text: Text string to embed
+        :type text: str
+        :return: Embedding vector (1536-dimensional for Ada-002)
+        :rtype: List[float]
+        '''
         embeddings = self.get_embeddings([text])
         return embeddings[0] if embeddings else []
 
@@ -221,18 +270,21 @@ class AzureOpenAIService:
         max_tokens: Optional[int] = None,
         stream: bool = False,
     ) -> str:
-        """
-        Generate chat completion using Azure OpenAI.
-
-        Args:
-            messages: List of message dictionaries with 'role' and 'content'
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            stream: Whether to stream the response
-
-        Returns:
-            Generated text response
-        """
+        '''
+        Generate chat completion from messages.
+        
+        :param self: AzureOpenAIService instance
+        :param messages: List of message dictionaries with 'role' and 'content'
+        :type messages: List[ChatCompletionMessageParam]
+        :param temperature: Sampling temperature (0-2), uses config default if None
+        :type temperature: Optional[float]
+        :param max_tokens: Maximum tokens to generate, uses config default if None
+        :type max_tokens: Optional[int]
+        :param stream: Description
+        :type stream: bool
+        :return: Description
+        :rtype: str
+        '''
         try:
             logger.info("Generating chat completion")
             start_time = time.time()
@@ -269,19 +321,23 @@ class AzureOpenAIService:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> str:
-        """
-        Generate chat completion with context (for RAG).
-
-        Args:
-            query: User query
-            context: Retrieved context from documents
-            system_prompt: Optional system prompt
-            temperature: Sampling temperature
-            max_tokens: Maximum tokens to generate
-
-        Returns:
-            Generated response
-        """
+        '''
+        Generate chat completion using provided context.
+        
+        :param self: AzureOpenAIService instance
+        :param query: User query to answer
+        :type query: str
+        :param context: Retrieved context from documents
+        :type context: str
+        :param system_prompt: Optional system prompt for LLM behavior
+        :type system_prompt: Optional[str]
+        :param temperature: Description
+        :type temperature: Optional[float]
+        :param max_tokens: Description
+        :type max_tokens: Optional[int]
+        :return: Description
+        :rtype: str
+        '''
         default_system_prompt = (
             "You are a helpful AI assistant. Answer the user's question based on the "
             "provided context. If the answer cannot be found in the context, say so. "
@@ -301,12 +357,13 @@ class AzureOpenAIService:
         )
 
     def validate_connection(self) -> bool:
-        """
-        Validate Azure OpenAI connection.
-
-        Returns:
-            True if connection is valid, False otherwise
-        """
+        '''
+        Validate Azure OpenAI connection by testing embedding generation.
+        
+        :param self: AzureOpenAIService instance
+        :return: True if connection is valid, False otherwise
+        :rtype: bool
+        '''
         try:
             logger.info("Validating Azure OpenAI connection")
             test_embedding = self.get_embedding("test")
@@ -324,18 +381,23 @@ class AzureOpenAIService:
 
 
 class AzureOpenAIServiceSingleton:
-    """Singleton wrapper for AzureOpenAIService."""
+    '''
+    Singleton wrapper for AzureOpenAIService.
+    
+    Ensures only one instance of AzureOpenAIService is created.
+    '''
 
     _instance: Optional[AzureOpenAIService] = None
 
     @classmethod
     def get_instance(cls) -> AzureOpenAIService:
-        """
-        Get or create Azure OpenAI service instance (singleton pattern).
-
-        Returns:
-            AzureOpenAIService instance
-        """
+        '''
+        Get or create AzureOpenAIService instance.
+        
+        :param cls: AzureOpenAIServiceSingleton class
+        :return: AzureOpenAIService instance
+        :rtype: AzureOpenAIService
+        '''
         if cls._instance is None:
             cls._instance = AzureOpenAIService()
 
@@ -343,10 +405,10 @@ class AzureOpenAIServiceSingleton:
 
 
 def get_azure_openai_service() -> AzureOpenAIService:
-    """
-    Get or create Azure OpenAI service instance (singleton pattern).
-
-    Returns:
-        AzureOpenAIService instance
-    """
+    '''
+    Get or create AzureOpenAIService instance (singleton pattern).
+    
+    :return: AzureOpenAIService instance
+    :rtype: AzureOpenAIService
+    '''
     return AzureOpenAIServiceSingleton.get_instance()

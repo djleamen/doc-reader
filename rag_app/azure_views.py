@@ -1,5 +1,9 @@
 """  
 Django views and API endpoints for Azure RAG pipeline.
+Uses Azure Document Intelligence for document processing, 
+Azure AI Search for retrieval, and Azure OpenAI for answer generation.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import sys
@@ -35,17 +39,12 @@ class AzureDocumentUploadView(APIView):
     """
 
     def post(self, request):
-        """
-        Upload and process documents.
-
-        Request body:
-        - files: List of file uploads
-        - index_name: Optional index name (default from settings)
-
-        Returns:
-        - status: success/error
-        - results: List of processing results for each file
-        """
+        '''
+        Upload documents to Azure RAG system.
+        
+        :param request: HTTP request with uploaded files
+        :return: JSON response with upload status and results
+        '''
         try:
             serializer = DocumentUploadSerializer(data=request.data)
             if not serializer.is_valid():
@@ -116,23 +115,12 @@ class AzureQueryView(APIView):
     """
 
     def post(self, request):
-        """
-        Query the Azure RAG system.
-
-        Request body:
-        - question: User question
-        - index_name: Optional index name
-        - k: Number of documents to retrieve (default: 5)
-        - use_hybrid: Use hybrid search (default: true)
-        - use_semantic: Use semantic ranking (default: true)
-        - include_sources: Include source documents (default: true)
-        - include_scores: Include relevance scores (default: true)
-
-        Returns:
-        - answer: Generated answer
-        - sources: Source documents (if requested)
-        - metadata: Query metadata
-        """
+        '''
+        Execute a query against the Azure RAG system.
+        
+        :param request: HTTP request with query parameters
+        :return: JSON response with answer and source documents
+        '''
         try:
             serializer = QueryRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -198,23 +186,12 @@ class AzureConversationalQueryView(APIView):
     """
 
     def post(self, request):
-        """
-        Query with conversation history.
-
-        Request body:
-        - question: User question
-        - index_name: Optional index name
-        - k: Number of documents to retrieve
-        - use_hybrid: Use hybrid search
-        - use_semantic: Use semantic ranking
-        - include_sources: Include source documents
-
-        Returns:
-        - answer: Generated answer
-        - sources: Source documents
-        - conversation_history: Recent conversation
-        - metadata: Query metadata
-        """
+        '''
+        Execute a conversational query against the Azure RAG system.
+        
+        :param request: HTTP request with query and conversation history
+        :return: JSON response with answer and source documents
+        '''
         try:
             serializer = QueryRequestSerializer(data=request.data)
             if not serializer.is_valid():
@@ -282,15 +259,12 @@ class AzureConversationalQueryView(APIView):
 
 @api_view(['GET'])
 def azure_index_stats(request):
-    """
-    Get Azure RAG index statistics.
-
-    Query params:
-    - index_name: Optional index name
-
-    Returns:
-    - index statistics and configuration
-    """
+    '''
+    Get statistics for a specific Azure RAG index.
+    
+    :param request: HTTP request object
+    :return: HTTP response with index statistics
+    '''
     try:
         index_name = request.GET.get('index_name')
 
@@ -316,15 +290,12 @@ def azure_index_stats(request):
 
 @api_view(['POST'])
 def azure_clear_cache(request):
-    """
-    Clear Azure RAG query cache.
-
-    Request body:
-    - index_name: Optional index name
-
-    Returns:
-    - status message
-    """
+    '''
+    Clear the Azure RAG engine cache.
+    
+    :param request: HTTP request object
+    :return: HTTP response with cache clear status
+    '''
     try:
         index_name = request.data.get('index_name')
 
@@ -350,15 +321,12 @@ def azure_clear_cache(request):
 
 @api_view(['POST'])
 def azure_clear_conversation(request):
-    """
+    '''
     Clear conversation history.
-
-    Request body:
-    - index_name: Optional index name
-
-    Returns:
-    - status message
-    """
+    
+    :param request: HTTP request object
+    :return: HTTP response with conversation clear status
+    '''
     try:
         index_name = request.data.get('index_name')
 
@@ -390,14 +358,12 @@ def azure_clear_conversation(request):
 
 @api_view(['GET'])
 def azure_health_check(request):
-    """
+    '''
     Health check endpoint for Azure RAG pipeline.
-    Validates Azure services connectivity.
-
-    Returns:
-    - configuration status
-    - service connectivity status
-    """
+    
+    :param request: HTTP request object
+    :return: HTTP response with health status
+    '''
     try:
         # Get Azure RAG engine
         rag_engine = get_azure_rag_engine()

@@ -1,12 +1,17 @@
 """
-URL configuration for the RAG app.
+URL configuration for the RAG Document Q&A system.
+
+Defines URL patterns for both API endpoints and web interface views,
+including standard RAG pipeline and Azure RAG pipeline routes.
+
+Written by DJ Leamen (2025-2026)
 """
 
 from django.urls import path
 from . import views
 from . import azure_views
 
-# API URLs
+# API URL patterns for RAG Document Q&A system
 api_urlpatterns = [
     path('upload-documents/', views.DocumentUploadView.as_view(),
          name='api-upload-documents'),
@@ -37,7 +42,7 @@ api_urlpatterns = [
          name='api-azure-health'),
 ]
 
-# Web URLs
+# Web URL patterns for user interface
 web_urlpatterns = [
     path('', views.HomeView.as_view(), name='home'),
     path('test/', views.TestView.as_view(), name='test'),

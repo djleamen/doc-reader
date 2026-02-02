@@ -1,6 +1,10 @@
 """
 Semantic coherence validation for RAG pipeline.
-Tracks coherence across query→chunk, chunk→generation, and query→generation embeddings.
+
+Tracks coherence across query→chunk, chunk→generation, and query→generation
+embeddings to identify and mitigate information loss during retrieval and generation.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import random
@@ -16,7 +20,13 @@ from src.config import settings
 
 
 def cosine_similarity_numpy(a: np.ndarray, b: np.ndarray) -> float:
-    '''Calculate cosine similarity between two vectors using numpy.'''
+    '''
+    Calculate cosine similarity between two vectors using numpy.
+    
+    :param a: First vector
+    :param b: Second vector
+    :return: Cosine similarity score (0 to 1)
+    '''
     # Flatten arrays to ensure they're 1D
     a_flat = a.flatten()
     b_flat = b.flatten()
@@ -33,7 +43,11 @@ def cosine_similarity_numpy(a: np.ndarray, b: np.ndarray) -> float:
     return dot_product / (norm_a * norm_b)
 
 class CoherenceLevel(Enum):
-    '''Coherence validation levels.'''
+    '''
+    Coherence validation levels.
+    
+    Defines severity levels for coherence drops in the RAG pipeline.
+    '''
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
@@ -41,7 +55,12 @@ class CoherenceLevel(Enum):
 
 @dataclass
 class CoherenceMetrics:
-    '''Container for coherence validation metrics.'''
+    '''
+    Container for coherence validation metrics.
+    
+    Stores similarity scores, deltas, and coherence assessment
+    across all RAG pipeline stages.
+    '''
     query_chunk_cosine: float
     chunk_generation_cosine: float
     query_generation_cosine: float
@@ -63,7 +82,12 @@ class CoherenceMetrics:
 
 @dataclass
 class FallbackAction:
-    '''Defines fallback actions when coherence drops.'''
+    '''
+    Defines fallback actions when coherence drops.
+    
+    Specifies remediation strategies including k-boosting,
+    hedging, and uncertainty flagging.
+    '''
     boost_k: bool = False
     hedge_output: bool = False
     flag_uncertainty: bool = False
@@ -73,14 +97,24 @@ class FallbackAction:
 
 
 class SemanticCoherenceValidator:
-    '''Validates semantic coherence across RAG pipeline stages.'''
+    '''
+    Validates semantic coherence across RAG pipeline stages.
+    
+    Measures embedding similarity between query, retrieved chunks,
+    and generated answer to detect information loss.
+    '''
 
     def __init__(
         self,
         coherence_thresholds: Optional[Dict[str, float]] = None,
         fallback_config: Optional[Dict[str, Any]] = None
     ):
-        '''Initialize the semantic coherence validator.'''
+        '''
+        Initialize the semantic coherence validator.
+        
+        :param coherence_thresholds: Custom threshold values for coherence levels
+        :param fallback_config: Custom configuration for fallback actions
+        '''
         self.embeddings = OpenAIEmbeddings(
             model=settings.embedding_model
         )
@@ -110,7 +144,14 @@ class SemanticCoherenceValidator:
         retrieved_chunks: List[Document],
         generated_answer: str
     ) -> Tuple[CoherenceMetrics, FallbackAction]:
-        '''Validate semantic coherence across the RAG pipeline.'''
+        '''
+        Validate semantic coherence across the RAG pipeline.
+        
+        :param query: User's query text
+        :param retrieved_chunks: List of retrieved document chunks
+        :param generated_answer: Generated answer text
+        :return: Tuple of (CoherenceMetrics, FallbackAction)
+        '''
         logger.debug(f"Validating coherence for query: {query[:50]}...")
 
         # Get embeddings
@@ -145,7 +186,12 @@ class SemanticCoherenceValidator:
         return metrics, fallback_action
 
     def _get_embedding(self, text: str) -> np.ndarray:
-        '''Get embedding vector for text.'''
+        '''
+        Get embedding vector for text.
+        
+        :param text: Text to embed
+        :return: Numpy array containing embedding vector
+        '''
         try:
             embedding = self.embeddings.embed_query(text)
             return np.array(embedding).reshape(1, -1)
@@ -155,7 +201,12 @@ class SemanticCoherenceValidator:
             return np.zeros((1, 1536))  # Default OpenAI embedding dimension
 
     def _get_chunk_embeddings(self, chunks: List[Document]) -> List[np.ndarray]:
-        '''Get embeddings for all chunks.'''
+        '''
+        Get embeddings for all chunks.
+        
+        :param chunks: List of document chunks
+        :return: List of embedding vectors for each chunk
+        '''
         embeddings = []
 
         for chunk in chunks:
@@ -174,7 +225,13 @@ class SemanticCoherenceValidator:
         query_embedding: np.ndarray,
         chunk_embeddings: List[np.ndarray]
     ) -> List[float]:
-        '''Calculate cosine similarities between query and chunks.'''
+        '''
+        Calculate cosine similarities between query and chunks.
+        
+        :param query_embedding: Query embedding vector
+        :param chunk_embeddings: List of chunk embedding vectors
+        :return: List of similarity scores (0-1)
+        '''
         similarities = []
 
         for chunk_embedding in chunk_embeddings:
@@ -192,7 +249,13 @@ class SemanticCoherenceValidator:
         chunk_embeddings: List[np.ndarray],
         answer_embedding: np.ndarray
     ) -> List[float]:
-        '''Calculate cosine similarities between chunks and generated answer.'''
+        '''
+        Calculate cosine similarities between chunks and generated answer.
+        
+        :param chunk_embeddings: List of chunk embedding vectors
+        :param answer_embedding: Generated answer embedding vector
+        :return: List of similarity scores between chunks and answer (0-1)
+        '''
         similarities = []
 
         for chunk_embedding in chunk_embeddings:
@@ -212,7 +275,15 @@ class SemanticCoherenceValidator:
         query_answer_similarity: float,
         num_chunks: int
     ) -> CoherenceMetrics:
-        '''Calculate comprehensive coherence metrics.'''
+        '''
+        Calculate comprehensive coherence metrics.
+        
+        :param query_chunk_similarities: Similarity scores between query and chunks
+        :param chunk_answer_similarities: Similarity scores between chunks and answer
+        :param query_answer_similarity: Similarity score between query and answer
+        :param num_chunks: Number of retrieved chunks
+        :return: CoherenceMetrics object with all calculated metrics
+        '''
 
         # Average similarities
         avg_query_chunk = np.mean(query_chunk_similarities) if query_chunk_similarities else 0.0
@@ -249,7 +320,12 @@ class SemanticCoherenceValidator:
         )
 
     def _determine_coherence_level(self, coherence_delta: float) -> CoherenceLevel:
-        '''Determine coherence level based on delta.'''
+        '''
+        Determine coherence level based on delta.
+        
+        :param coherence_delta: Calculated coherence gap (0-1)
+        :return: CoherenceLevel enum value (HIGH, MEDIUM, LOW, or CRITICAL)
+        '''
 
         # Invert the logic since delta represents gap (higher = worse)
         if coherence_delta <= (1 - self.thresholds["high_threshold"]):
@@ -262,7 +338,12 @@ class SemanticCoherenceValidator:
             return CoherenceLevel.CRITICAL
 
     def _determine_fallback_action(self, metrics: CoherenceMetrics) -> FallbackAction:
-        '''Determine appropriate fallback actions based on coherence metrics.'''
+        '''
+        Determine appropriate fallback actions based on coherence metrics.
+        
+        :param metrics: CoherenceMetrics object with validation results
+        :return: FallbackAction object specifying remediation strategies
+        '''
 
         action = FallbackAction()
 
@@ -303,7 +384,13 @@ class SemanticCoherenceValidator:
         return action
 
     def get_hedged_response(self, original_answer: str, metrics: CoherenceMetrics) -> str:
-        '''Add hedging language to response when coherence is questionable.'''
+        '''
+        Add hedging language to response when coherence is questionable.
+        
+        :param original_answer: Original generated answer text
+        :param metrics: CoherenceMetrics object with validation results
+        :return: Answer with appropriate hedging language based on coherence level
+        '''
         if metrics.coherence_level == CoherenceLevel.HIGH:
             return original_answer
 

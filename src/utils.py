@@ -1,5 +1,10 @@
 """
 Utility functions for the RAG Document Q&A system.
+
+Provides file operations, text processing, validation, system information,
+and backup utilities for the RAG application.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import hashlib
@@ -9,7 +14,12 @@ from typing import List, Dict, Any
 import time
 
 def get_file_hash(file_path: str) -> str:
-    '''Calculate MD5 hash of a file.'''
+    '''
+    Calculate MD5 hash of a file.
+    
+    :param file_path: Path to file
+    :return: MD5 hash hexadecimal string
+    '''
     hash_md5 = hashlib.md5()
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
@@ -18,7 +28,13 @@ def get_file_hash(file_path: str) -> str:
 
 
 def get_file_info(file_path: str) -> Dict[str, Any]:
-    '''Get comprehensive file information.'''
+    '''
+    Get comprehensive file information.
+    
+    :param file_path: Path to file
+    :return: Dictionary with file metadata including size, dates, type, and hash
+    :raises FileNotFoundError: If file does not exist
+    '''
     path = Path(file_path)
 
     if not path.exists():
@@ -39,7 +55,12 @@ def get_file_info(file_path: str) -> Dict[str, Any]:
 
 
 def format_file_size(size_bytes: int) -> str:
-    '''Format file size in human readable format.'''
+    '''
+    Format file size in human readable format.
+    
+    :param size_bytes: Size in bytes
+    :return: Formatted string (e.g., "1.5 MB")
+    '''
     if size_bytes == 0:
         return "0 B"
 
@@ -54,13 +75,24 @@ def format_file_size(size_bytes: int) -> str:
 
 
 def validate_document_format(file_path: str, supported_formats: List[str]) -> bool:
-    '''Validate if document format is supported.'''
+    '''
+    Validate if document format is supported.
+    
+    :param file_path: Path to document file
+    :param supported_formats: List of supported file extensions
+    :return: True if format is supported, False otherwise
+    '''
     extension = Path(file_path).suffix.lower().lstrip('.')
     return extension in supported_formats
 
 
 def clean_text(text: str) -> str:
-    '''Clean and normalize text content.'''
+    '''
+    Clean and normalize text content.
+    
+    :param text: Raw text to clean
+    :return: Cleaned text with normalized whitespace
+    '''
     if not text:
         return ""
 
@@ -74,7 +106,13 @@ def clean_text(text: str) -> str:
 
 
 def split_text_by_sentences(text: str, max_chunk_size: int = 1000) -> List[str]:
-    '''Split text into chunks by sentences, respecting max size.'''
+    '''
+    Split text into chunks by sentences, respecting max size.
+    
+    :param text: Text to split into chunks
+    :param max_chunk_size: Maximum size of each chunk in characters
+    :return: List of text chunks
+    '''
     import re
 
     # Simple sentence splitting (can be improved with spaCy for better accuracy)
@@ -98,7 +136,13 @@ def split_text_by_sentences(text: str, max_chunk_size: int = 1000) -> List[str]:
 
 
 def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
-    '''Extract keywords from text using simple frequency analysis.'''
+    '''
+    Extract keywords from text using simple frequency analysis.
+    
+    :param text: Text to extract keywords from
+    :param max_keywords: Maximum number of keywords to extract
+    :return: List of extracted keywords
+    '''
     import re
     from collections import Counter
 
@@ -126,7 +170,12 @@ def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
 
 
 def time_function(func):
-    '''Decorator to time function execution.'''
+    '''
+    Decorator to time function execution.
+    
+    :param func: Function to time
+    :return: Wrapped function that logs execution time
+    '''
     def wrapper(*args, **kwargs):
         start_time = time.time()
         result = func(*args, **kwargs)
@@ -138,7 +187,11 @@ def time_function(func):
 
 
 def create_directory_structure():
-    '''Create necessary directory structure for the application.'''
+    '''
+    Create necessary directory structure for the application.
+    
+    Creates directories for documents, indexes, logs, temp files, and backups.
+    '''
     from src.config import settings
 
     directories = [
@@ -154,7 +207,14 @@ def create_directory_structure():
 
 
 def backup_index(index_name: str, backup_dir: str = "backups") -> str:
-    '''Create a backup of an index.'''
+    '''
+    Create a backup of an index.
+    
+    :param index_name: Name of the index to backup
+    :param backup_dir: Directory to store backups
+    :return: Path to the created backup
+    :raises FileNotFoundError: If index does not exist
+    '''
     from src.config import settings
     import shutil
     import datetime
@@ -177,7 +237,13 @@ def backup_index(index_name: str, backup_dir: str = "backups") -> str:
 
 
 def restore_index(backup_path: str, index_name: str) -> None:
-    '''Restore an index from backup.'''
+    '''
+    Restore an index from backup.
+    
+    :param backup_path: Path to the backup directory
+    :param index_name: Name to give the restored index
+    :raises FileNotFoundError: If backup does not exist
+    '''
     from src.config import settings
     import shutil
 
@@ -194,7 +260,11 @@ def restore_index(backup_path: str, index_name: str) -> None:
 
 
 def get_system_info() -> Dict[str, Any]:
-    '''Get system information for debugging.'''
+    '''
+    Get system information for debugging.
+    
+    :return: Dictionary with platform, Python version, CPU, memory, and disk info
+    '''
     import platform
 
     try:
@@ -226,22 +296,45 @@ def get_system_info() -> Dict[str, Any]:
 
 
 def estimate_processing_time(file_size_mb: float, avg_speed_mb_per_sec: float = 1.0) -> float:
-    '''Estimate processing time for a file based on size.'''
+    '''
+    Estimate processing time for a file based on size.
+    
+    :param file_size_mb: File size in megabytes
+    :param avg_speed_mb_per_sec: Average processing speed in MB/second
+    :return: Estimated processing time in seconds
+    '''
     return file_size_mb / avg_speed_mb_per_sec
 
 
 def validate_openai_api_key(api_key: str) -> bool:
-    '''Validate OpenAI API key format.'''
+    '''
+    Validate OpenAI API key format.
+    
+    :param api_key: API key string to validate
+    :return: True if format is valid, False otherwise
+    '''
     return api_key.startswith('sk-') and len(api_key) > 20
 
 
 def chunk_list(lst: List, chunk_size: int) -> List[List]:
-    '''Split a list into chunks of specified size.'''
+    '''
+    Split a list into chunks of specified size.
+    
+    :param lst: List to split
+    :param chunk_size: Size of each chunk
+    :return: List of list chunks
+    '''
     return [lst[i:i + chunk_size] for i in range(0, len(lst), chunk_size)]
 
 
 def merge_metadata(base_metadata: Dict[str, Any], additional_metadata: Dict[str, Any]) -> Dict[str, Any]:
-    '''Merge metadata dictionaries with conflict resolution.'''
+    '''
+    Merge metadata dictionaries with conflict resolution.
+    
+    :param base_metadata: Base metadata dictionary
+    :param additional_metadata: Additional metadata to merge
+    :return: Merged metadata dictionary with conflicts prefixed as 'additional_'
+    '''
     merged = base_metadata.copy()
 
     for key, value in additional_metadata.items():
@@ -255,21 +348,39 @@ def merge_metadata(base_metadata: Dict[str, Any], additional_metadata: Dict[str,
 
 
 class ProgressTracker:
-    '''Simple progress tracker for long-running operations.'''
+    '''
+    Simple progress tracker for long-running operations.
+    
+    Displays progress percentage and updates for batch processing.
+    '''
 
     def __init__(self, total: int, description: str = "Processing"):
+        '''
+        Initialize progress tracker.
+        
+        :param total: Total number of items to process
+        :param description: Description of the operation being tracked
+        '''
         self.total = total
         self.current = 0
         self.description = description
         self.start_time = time.time()
 
     def update(self, increment: int = 1):
-        '''Update progress.'''
+        '''
+        Update progress.
+        
+        :param increment: Number of items to increment by
+        '''
         self.current += increment
         self._print_progress()
 
     def _print_progress(self):
-        '''Print progress bar.'''
+        '''
+        Print progress bar.
+        
+        Displays progress bar with percentage, ETA, and completion status.
+        '''
         if self.total == 0:
             return
 

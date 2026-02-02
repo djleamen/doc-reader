@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
 Setup script for the RAG Document Q&A system.
+
+Written by DJ Leamen (2025-2026)
 """
 import os
 import sys
@@ -9,7 +11,13 @@ from pathlib import Path
 
 
 def run_command(command, description):
-    """Run a shell command and handle errors."""
+    '''
+    Run a shell command with error handling.
+    
+    :param command: Command to run
+    :param description: Description of the command
+    :return: True if command succeeded, False otherwise
+    '''
     print(f"{description}...")
     try:
         subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
@@ -22,7 +30,11 @@ def run_command(command, description):
 
 
 def check_python_version():
-    """Check if Python version is compatible."""
+    '''
+    Check if the Python version is 3.8 or higher.
+    
+    :return: True if version is valid, False otherwise
+    '''
     version = sys.version_info
     if version.major < 3 or (version.major == 3 and version.minor < 8):
         print("❌ Python 3.8 or higher is required")
@@ -32,7 +44,11 @@ def check_python_version():
 
 
 def setup_environment():
-    """Set up the development environment."""
+    '''
+    Set up the development environment for the RAG Document Q&A System.
+    
+    :return: True if setup succeeded, False otherwise
+    '''
     print("Setting up RAG Document Q&A System...")
 
     # Check Python version
@@ -84,7 +100,11 @@ def setup_environment():
 
 
 def main():
-    """Main setup function."""
+    '''
+    Main entry point for the RAG Document Q&A system.
+    Parses command-line arguments and dispatches to appropriate
+    functionality: quick start, Django app, CLI, or setup.
+    '''
     try:
         success = setup_environment()
         sys.exit(0 if success else 1)

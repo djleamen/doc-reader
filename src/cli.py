@@ -1,5 +1,10 @@
 """
 Command-line interface for the RAG Document Q&A system.
+
+Provides CLI commands for document management, querying, and system
+administration including interactive mode and batch operations.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import argparse
@@ -13,7 +18,12 @@ from src.config import settings
 from src.rag_engine import RAGEngine, ConversationalRAG
 
 def setup_logging():
-    '''Setup logging configuration.'''
+    '''
+    Setup logging configuration.
+    
+    Configures loguru logger for both console and file output
+    with rotation and retention policies.
+    '''
     logger.remove()
     logger.add(
         sys.stderr,
@@ -28,7 +38,11 @@ def setup_logging():
 
 
 def add_documents_command(args):
-    '''Add documents to the RAG system.'''
+    '''
+    Add documents to the RAG system.
+    
+    :param args: Command-line arguments containing file paths and index name
+    '''
     logger.info(f"Adding documents to index: {args.index_name}")
 
     rag_engine = RAGEngine(args.index_name)
@@ -54,7 +68,12 @@ def add_documents_command(args):
 
 
 def _print_query_result(result, args):
-    '''Print query result with optional sources and metadata.'''
+    '''
+    Print query result with optional sources and metadata.
+    
+    :param result: QueryResult object containing answer and sources
+    :param args: Command-line arguments for display options
+    '''
     print("\n" + "="*80)
     print("QUESTION:")
     print(args.question)
@@ -72,7 +91,12 @@ def _print_query_result(result, args):
 
 
 def _print_source_documents(result, args):
-    '''Print source documents with scores.'''
+    '''
+    Print source documents with similarity scores.
+    
+    :param result: QueryResult object containing source documents
+    :param args: Command-line arguments for display options
+    '''
     print("\n" + "-"*80)
     print("SOURCE DOCUMENTS:")
     for i, doc in enumerate(result.source_documents, 1):
@@ -88,7 +112,13 @@ def _print_source_documents(result, args):
 
 
 def _execute_query(rag_engine, args):
-    '''Execute query based on engine type.'''
+    '''
+    Execute query based on engine type.
+    
+    :param rag_engine: RAGEngine or ConversationalRAG instance
+    :param args: Command-line arguments containing query parameters
+    :return: QueryResult object
+    '''
     if args.conversational:
         assert isinstance(rag_engine, ConversationalRAG)
         return rag_engine.conversational_query(
@@ -107,7 +137,11 @@ def _execute_query(rag_engine, args):
 
 
 def query_command(args):
-    '''Query the RAG system.'''
+    '''
+    Query the RAG system.
+    
+    :param args: Command-line arguments containing question and query parameters
+    '''
     logger.info(f"Querying index: {args.index_name}")
 
     rag_engine: Union[RAGEngine, ConversationalRAG]
@@ -125,7 +159,13 @@ def query_command(args):
 
 
 def _handle_clear_command(rag_engine, args):
-    '''Handle clear conversation command.'''
+    '''
+    Handle clear conversation command.
+    
+    :param rag_engine: ConversationalRAG instance
+    :param args: Command-line arguments
+    :return: False to continue interactive mode
+    '''
     if args.conversational:
         assert isinstance(rag_engine, ConversationalRAG)
         rag_engine.clear_conversation()
@@ -135,7 +175,13 @@ def _handle_clear_command(rag_engine, args):
 
 
 def _process_interactive_question(rag_engine, question, args):
-    '''Process a single question in interactive mode.'''
+    '''
+    Process a single question in interactive mode.
+    
+    :param rag_engine: RAGEngine or ConversationalRAG instance
+    :param question: User's question text
+    :param args: Command-line arguments for query options
+    '''
     print("🔍 Searching for answer...")
 
     if args.conversational:
@@ -161,7 +207,14 @@ def _process_interactive_question(rag_engine, question, args):
 
 
 def interactive_mode(args):
-    '''Interactive Q&A mode.'''
+    '''
+    Interactive Q&A mode.
+    
+    Starts an interactive session for continuous question answering
+    with optional conversation history.
+    
+    :param args: Command-line arguments for session configuration
+    '''
     logger.info(f"Starting interactive mode with index: {args.index_name}")
 
     if args.conversational:
@@ -200,7 +253,11 @@ def interactive_mode(args):
 
 
 def list_indexes_command(args):
-    '''List available indexes.'''
+    '''
+    List available indexes.
+    
+    :param args: Command-line arguments (unused)
+    '''
     index_dir = Path(settings.index_dir)
 
     if not index_dir.exists():
@@ -218,7 +275,11 @@ def list_indexes_command(args):
 
 
 def stats_command(args):
-    '''Show index statistics.'''
+    '''
+    Show index statistics.
+    
+    :param args: Command-line arguments containing index name
+    '''
     rag_engine = RAGEngine(args.index_name)
     stats = rag_engine.get_index_stats()
 
@@ -228,7 +289,11 @@ def stats_command(args):
 
 
 def clear_index_command(args):
-    '''Clear an index.'''
+    '''
+    Clear an index.
+    
+    :param args: Command-line arguments containing index name and confirmation flag
+    '''
     if args.confirm or input(f"Are you sure you want to clear index '{args.index_name}'? (y/N): ").lower() == 'y':
         rag_engine = RAGEngine(args.index_name)
         rag_engine.clear_index()
@@ -238,7 +303,12 @@ def clear_index_command(args):
 
 
 def main():
-    '''Main CLI entry point.'''
+    '''
+    Main CLI entry point.
+    
+    Parses command-line arguments and dispatches to appropriate
+    command handler.
+    '''
     setup_logging()
 
     parser = argparse.ArgumentParser(description="RAG Document Q&A System CLI")

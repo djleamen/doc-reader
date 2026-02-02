@@ -1,6 +1,8 @@
 """
 Azure-specific configuration for experimental RAG pipeline.
 Uses Azure OpenAI, AI Search, Document Intelligence, and Key Vault.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import os
@@ -13,7 +15,12 @@ load_dotenv()
 
 
 class AzureSettings:
-    """Experimental Azure RAG configuration with Managed Identity support."""
+    '''
+    Experimental Azure RAG configuration with Managed Identity support.
+    
+    Manages authentication, service endpoints, and configuration settings for Azure services
+    including OpenAI, AI Search, Document Intelligence, and Key Vault.
+    '''
 
     def __init__(self):
         # Authentication Strategy
@@ -92,18 +99,13 @@ class AzureSettings:
         self.max_tokens = int(os.getenv("AZURE_MAX_TOKENS", "4000"))
 
     def get_credential(self) -> TokenCredential:
-        """
-        Get Azure credential with proper authentication flow.
-
-        Authentication Priority:
-        1. Managed Identity (for Azure-hosted apps)
-        2. Service Principal (for CI/CD)
-        3. Azure CLI (for local development)
-        4. Interactive Browser (fallback)
-
-        Returns:
-            TokenCredential: Azure credential object
-        """
+        '''
+        Get Azure authentication credential based on configuration.
+        
+        :param self: AzureSettings instance
+        :return: Azure authentication credential
+        :rtype: TokenCredential
+        '''
         try:
             if self.use_managed_identity:
                 logger.info("Using Managed Identity for authentication")
@@ -126,12 +128,13 @@ class AzureSettings:
             raise
 
     def validate_configuration(self) -> tuple[bool, list[str]]:
-        """
-        Validate required Azure configuration.
-
-        Returns:
-            tuple: (is_valid, list of missing configurations)
-        """
+        '''
+        Validate Azure configuration settings.
+        
+        :param self: AzureSettings instance
+        :return: Tuple of (is_valid, missing_settings)
+        :rtype: tuple[bool, list[str]]
+        '''
         missing = []
 
         if not self.openai_endpoint:
@@ -167,7 +170,13 @@ class AzureSettings:
 
     @property
     def is_configured(self) -> bool:
-        """Check if Azure RAG pipeline is properly configured."""
+        '''
+        Check if Azure settings are properly configured.
+        
+        :param self: AzureSettings instance
+        :return: True if configuration is valid, False otherwise
+        :rtype: bool
+        '''
         is_valid, _ = self.validate_configuration()
         return is_valid
 

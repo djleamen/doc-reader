@@ -1,7 +1,10 @@
 """
 Main entry point for the RAG Document Q&A system.
 This is the unified entry point for all system operations.
+
+Written by DJ Leamen (2025-2026)
 """
+
 import argparse
 import os
 import subprocess
@@ -16,7 +19,11 @@ MANAGE_PY = 'manage.py'
 
 
 def main():
-    """Main entry point with command routing."""
+    '''
+    Main entry point for the RAG Document Q&A system.
+    Parses command-line arguments and dispatches to appropriate
+    functionality: quick start, Django app, CLI, or setup.
+    '''
     parser = argparse.ArgumentParser(
         description="RAG Document Q&A System - Unified Entry Point",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -85,7 +92,10 @@ Examples:
 
 
 def run_setup():
-    """Run the setup script."""
+    '''
+    Run first-time setup script.
+    Executes setup.py and handles errors gracefully.
+    '''
     print("⚙️ Running first-time setup...")
     try:
         # First try without capturing output to see what happens
@@ -109,7 +119,13 @@ def run_setup():
 
 
 def start_django(host="127.0.0.1", port=8000, with_setup=False):
-    """Start the Django application."""
+    '''
+    Start the Django development server.
+    
+    :param host: Host address to bind the server
+    :param port: Port number to bind the server
+    :param with_setup: Whether to run migrations and collectstatic before starting
+    '''
     import django
     from django.core.management import execute_from_command_line
 

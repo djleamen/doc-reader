@@ -1,6 +1,8 @@
 """
 Azure Document Intelligence for advanced document processing.
 Supports layout analysis, table extraction, and OCR.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import time
@@ -25,13 +27,21 @@ class AzureDocumentProcessor:
     """
 
     def __init__(self):
-        """Initialize Azure Document Intelligence client."""
+        '''
+        Initialize Azure Document Processor.
+        
+        :param self: AzureDocumentProcessor instance
+        '''
         self.settings = azure_settings
         self.client: Optional[DocumentAnalysisClient] = None
         self._initialize_client()
 
     def _initialize_client(self) -> None:
-        """Initialize Azure Document Intelligence client with proper authentication."""
+        '''
+        Initialize Azure Document Intelligence client.
+        
+        :param self: AzureDocumentProcessor instance
+        '''
         try:
             endpoint = self.settings.document_intelligence_endpoint
 
@@ -75,16 +85,17 @@ class AzureDocumentProcessor:
         file_path: str,
         model_id: str = "prebuilt-layout",
     ) -> Dict[str, Any]:
-        """
+        '''
         Analyze document using Azure Document Intelligence.
-
-        Args:
-            file_path: Path to document file
-            model_id: Model to use (prebuilt-layout, prebuilt-document, prebuilt-read)
-
-        Returns:
-            Dict with analyzed document structure
-        """
+        
+        :param self: AzureDocumentProcessor instance
+        :param file_path: Path to document file
+        :type file_path: str
+        :param model_id: Model to use (prebuilt-layout, prebuilt-document, prebuilt-read)
+        :type model_id: str
+        :return: Dictionary with analyzed document structure including pages, tables, and content
+        :rtype: Dict[str, Any]
+        '''
         try:
             if self.client is None:
                 raise ValueError(
@@ -109,8 +120,19 @@ class AzureDocumentProcessor:
             logger.error(f"Failed to analyze document: {e}")
             raise
 
-    def _analyze_document_with_client(self, file_path: str, model_id: str) -> Any:
-        """Read file and analyze with Azure Document Intelligence client."""
+    def _analyze_document_with_client(self, file_path: str, 
+                                      model_id: str) -> Any:
+        '''
+        Analyze document using the Azure Document Intelligence client.
+        
+        :param self: AzureDocumentProcessor instance
+        :param file_path: Path to document file
+        :type file_path: str
+        :param model_id: Model ID to use for analysis
+        :type model_id: str
+        :return: Analysis result from Azure Document Intelligence
+        :rtype: Any
+        '''
         if self.client is None:
             raise ValueError(
                 "Azure Document Intelligence client is not initialized")
@@ -125,7 +147,15 @@ class AzureDocumentProcessor:
         return poller.result()
 
     def _build_analyzed_data(self, result: Any) -> Dict[str, Any]:
-        """Build structured data dictionary from analysis result."""
+        '''
+        Build structured data dictionary from analysis result.
+        
+        :param self: AzureDocumentProcessor instance
+        :param result: Analysis result from Azure Document Intelligence
+        :type result: Any
+        :return: Structured dictionary containing pages, tables, and content details
+        :rtype: Dict[str, Any]
+        '''
         analyzed_data = {
             "pages": len(result.pages),
             "paragraphs": len(result.paragraphs) if hasattr(result, 'paragraphs') and result.paragraphs is not None else 0,
@@ -138,7 +168,15 @@ class AzureDocumentProcessor:
         return analyzed_data
 
     def _extract_pages_detail(self, pages: List[Any]) -> List[Dict[str, Any]]:
-        """Extract detailed information from pages."""
+        '''
+        Extract detailed information from pages.
+        
+        :param self: AzureDocumentProcessor instance
+        :param pages: List of page objects from analysis result
+        :type pages: List[Any]
+        :return: List of dictionaries containing page details (number, dimensions, lines, words)
+        :rtype: List[Dict[str, Any]]
+        '''
         pages_detail = []
         for page in pages:
             page_data = {
@@ -153,7 +191,15 @@ class AzureDocumentProcessor:
         return pages_detail
 
     def _extract_tables_detail(self, result: Any) -> List[Dict[str, Any]]:
-        """Extract detailed information from tables."""
+        '''
+        Extract detailed information from tables.
+        
+        :param self: AzureDocumentProcessor instance
+        :param result: Analysis result from Azure Document Intelligence
+        :type result: Any
+        :return: List of dictionaries containing table details (rows, columns, cells)
+        :rtype: List[Dict[str, Any]]
+        '''
         tables_detail = []
         if hasattr(result, 'tables') and result.tables is not None:
             for table_idx, table in enumerate(result.tables):
@@ -161,8 +207,19 @@ class AzureDocumentProcessor:
                 tables_detail.append(table_data)
         return tables_detail
 
-    def _build_table_data(self, table_idx: int, table: Any) -> Dict[str, Any]:
-        """Build table data structure with cells."""
+    def _build_table_data(self, table_idx: int, 
+                          table: Any) -> Dict[str, Any]:
+        '''
+        Build structured data for a single table.
+        
+        :param self: AzureDocumentProcessor instance
+        :param table_idx: Index of the table
+        :type table_idx: int
+        :param table: Table object from analysis result
+        :type table: Any
+        :return: Dictionary containing table structure with row/column counts and cell data
+        :rtype: Dict[str, Any]
+        '''
         table_data = {
             "table_id": table_idx,
             "row_count": table.row_count,
@@ -182,15 +239,15 @@ class AzureDocumentProcessor:
         return table_data
 
     def extract_text(self, file_path: str) -> str:
-        """
-        Extract plain text from document.
-
-        Args:
-            file_path: Path to document file
-
-        Returns:
-            Extracted text
-        """
+        '''
+        Extract text content from document.
+        
+        :param self: AzureDocumentProcessor instance
+        :param file_path: Path to document file
+        :type file_path: str
+        :return: Extracted plain text content
+        :rtype: str
+        '''
         try:
             analyzed_data = self.analyze_document(
                 file_path, model_id="prebuilt-read")
@@ -201,15 +258,15 @@ class AzureDocumentProcessor:
             raise
 
     def _format_tables_as_markdown(self, tables_detail: List[Dict[str, Any]]) -> str:
-        """
-        Format extracted table data as markdown.
-
-        Args:
-            tables_detail: List of table dictionaries from analyze_document
-
-        Returns:
-            Tables formatted as markdown
-        """
+        '''
+        Format extracted tables as markdown strings.
+        
+        :param self: AzureDocumentProcessor instance
+        :param tables_detail: List of table dictionaries from analyze_document
+        :type tables_detail: List[Dict[str, Any]]
+        :return: Tables formatted as markdown strings
+        :rtype: str
+        '''
         if not tables_detail:
             return ""
 
@@ -236,15 +293,15 @@ class AzureDocumentProcessor:
         return "\n\n".join(markdown_output)
 
     def extract_tables_as_markdown(self, file_path: str) -> str:
-        """
-        Extract tables from document as markdown.
-
-        Args:
-            file_path: Path to document file
-
-        Returns:
-            Tables formatted as markdown
-        """
+        '''
+        Extract tables from document and format as markdown.
+        
+        :param self: AzureDocumentProcessor instance
+        :param file_path: Path to document file
+        :type file_path: str
+        :return: Tables formatted as markdown strings
+        :rtype: str
+        '''
         try:
             analyzed_data = self.analyze_document(
                 file_path, model_id="prebuilt-layout")
@@ -276,15 +333,15 @@ class AzureDocumentProcessor:
             raise
 
     def process_document(self, file_path: str) -> List[Document]:
-        """
-        Process document and return LangChain documents with chunks.
-
-        Args:
-            file_path: Path to document file
-
-        Returns:
-            List of LangChain Document objects
-        """
+        '''
+        Process document into chunks using Azure Document Intelligence.
+        
+        :param self: AzureDocumentProcessor instance
+        :param file_path: Path to document file
+        :type file_path: str
+        :return: List of LangChain Document objects with metadata
+        :rtype: List[Document]
+        '''
         try:
             logger.info(f"Processing document: {file_path}")
             start_time = time.time()
@@ -337,15 +394,15 @@ class AzureDocumentProcessor:
             raise
 
     def _split_into_chunks(self, text: str) -> List[str]:
-        """
+        '''
         Split text into chunks based on settings.
-
-        Args:
-            text: Text to split
-
-        Returns:
-            List of text chunks
-        """
+        
+        :param self: AzureDocumentProcessor instance
+        :param text: Text to split into chunks
+        :type text: str
+        :return: List of text chunks with configured size and overlap
+        :rtype: List[str]
+        '''
         chunk_size = self.settings.chunk_size
         chunk_overlap = self.settings.chunk_overlap
 
@@ -361,12 +418,13 @@ class AzureDocumentProcessor:
         return chunks
 
     def supported_formats(self) -> List[str]:
-        """
+        '''
         Get list of supported document formats.
-
-        Returns:
-            List of supported file extensions
-        """
+        
+        :param self: AzureDocumentProcessor instance
+        :return: List of supported file extensions (pdf, jpeg, png, docx, etc.)
+        :rtype: List[str]
+        '''
         return [
             "pdf",
             "jpeg", "jpg",
@@ -380,12 +438,13 @@ class AzureDocumentProcessor:
         ]
 
     def validate_connection(self) -> bool:
-        """
-        Validate Azure Document Intelligence connection.
-
-        Returns:
-            True if connection is valid, False otherwise
-        """
+        '''
+        Validate connection to Azure Document Intelligence service.
+        
+        :param self: AzureDocumentProcessor instance
+        :return: True if connection is valid, False otherwise
+        :rtype: bool
+        '''
         try:
             logger.info("Validating Azure Document Intelligence connection")
             # Test with minimal operation
@@ -401,13 +460,26 @@ class AzureDocumentProcessor:
 
 
 class _AzureDocumentProcessorSingleton:
-    """Singleton container for Azure Document Processor instance."""
+    '''
+    Singleton container for AzureDocumentProcessor.
+    '''
 
     def __init__(self):
+        '''
+        Initialize the singleton container.
+        
+        :param self: _AzureDocumentProcessorSingleton instance
+        '''
         self._instance: Optional[AzureDocumentProcessor] = None
 
     def get_instance(self) -> AzureDocumentProcessor:
-        """Get or create Azure Document Processor instance."""
+        '''
+        Get or create AzureDocumentProcessor instance.
+        
+        :param self: _AzureDocumentProcessorSingleton instance
+        :return: AzureDocumentProcessor singleton instance
+        :rtype: AzureDocumentProcessor
+        '''
         if self._instance is None:
             self._instance = AzureDocumentProcessor()
         return self._instance
@@ -418,10 +490,10 @@ _singleton = _AzureDocumentProcessorSingleton()
 
 
 def get_azure_document_processor() -> AzureDocumentProcessor:
-    """
-    Get or create Azure Document Processor instance (singleton pattern).
-
-    Returns:
-        AzureDocumentProcessor instance
-    """
+    '''
+    Get or create AzureDocumentProcessor instance (singleton pattern).
+    
+    :return: AzureDocumentProcessor singleton instance
+    :rtype: AzureDocumentProcessor
+    '''
     return _singleton.get_instance()

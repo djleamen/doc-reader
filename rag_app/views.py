@@ -1,5 +1,7 @@
 """
 Views for the RAG Document Q&A system.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import json
@@ -31,14 +33,24 @@ _conversational_rags = {}
 
 
 def get_rag_engine(index_name: str = "default"):
-    '''Get or create RAG engine instance for given index.'''
+    '''
+    Get or create RAG engine instance for given index.
+    
+    :param index_name: Name of the document index
+    :return: RAGEngine instance for the specified index
+    '''
     if index_name not in _rag_engines:
         _rag_engines[index_name] = RAGEngine(index_name=index_name)
     return _rag_engines[index_name]
 
 
 def get_conversational_rag(index_name: str = "default"):
-    '''Get or create conversational RAG engine instance for given index.'''
+    '''
+    Get or create conversational RAG engine instance for given index.
+    
+    :param index_name: Name of the document index
+    :return: ConversationalRAG instance for the specified index
+    '''
     if index_name not in _conversational_rags:
         _conversational_rags[index_name] = ConversationalRAG(
             index_name=index_name)
@@ -46,10 +58,21 @@ def get_conversational_rag(index_name: str = "default"):
 
 
 class IndexView(TemplateView):
-    '''Main web interface view.'''
+    '''
+    Main web interface view.
+    
+    Renders the RAG Document Q&A web interface with document indexes,
+    recent documents, and supported file formats.
+    '''
     template_name = 'rag_app/index.html'
 
     def get_context_data(self, **kwargs):
+        '''
+        Get context data for template rendering.
+        
+        :param kwargs: Additional context arguments
+        :return: Template context dictionary
+        '''
         context = super().get_context_data(**kwargs)
         context.update({
             'indexes': DocumentIndex.objects.all(),
@@ -61,21 +84,39 @@ class IndexView(TemplateView):
 
 
 class HomeView(IndexView):
-    '''Alias for IndexView to match URLs pattern.'''
+    '''
+    Alias for IndexView to match URLs pattern.
+    
+    Inherits all functionality from IndexView.
+    '''
     # Inherits all functionality from IndexView
 
 
 class TestView(TemplateView):
-    '''Simple test view to verify Django is working.'''
+    '''
+    Simple test view to verify Django is working.
+    
+    Renders a basic test template for debugging purposes.
+    '''
     template_name = 'simple_test.html'
 
 
 @method_decorator(csrf_exempt, name='dispatch')
 class DocumentUploadView(APIView):
-    '''Handle document uploads via API.'''
+    '''
+    Handle document uploads via API.
+    
+    Accepts file uploads, processes documents using RAG engine,
+    and stores metadata in the database.
+    '''
 
     def post(self, request):
-        '''Handle document upload via API.'''
+        '''
+        Handle document upload via API.
+        
+        :param request: HTTP request with uploaded files
+        :return: JSON response with upload status and results
+        '''
         try:
             # Get or create index
             files = request.FILES.getlist('files')
@@ -167,7 +208,12 @@ class DocumentUploadView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class QueryView(APIView):
-    '''Handle document queries.'''
+    '''
+    Handle document queries.
+    
+    Processes natural language questions against indexed documents
+    and returns relevant answers with source citations.
+    '''
 
     def post(self, request):
         '''Handle document queries.'''
@@ -258,7 +304,12 @@ class QueryView(APIView):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ConversationalQueryView(APIView):
-    '''Handle conversational queries.'''
+    '''
+    Handle conversational queries.
+    
+    Processes queries while maintaining conversation history
+    for multi-turn dialogues.
+    '''
 
     def post(self, request):
         '''Handle document queries.'''
@@ -335,7 +386,12 @@ class ConversationalQueryView(APIView):
 
 @api_view(['GET'])
 def index_stats(request):
-    '''Get index statistics.'''
+    '''
+    Get index statistics.
+    
+    :param request: HTTP request with optional index_name parameter
+    :return: JSON response with index statistics and metadata
+    '''
     try:
         index_name = request.GET.get('index_name', 'default')
 
@@ -387,7 +443,12 @@ def index_stats(request):
 @csrf_protect
 @api_view(['DELETE'])
 def clear_conversation(request):
-    '''Clear conversation history for current session.'''
+    '''
+    Clear conversation history for current session.
+    
+    :param request: HTTP request with session information
+    :return: JSON response with success or error status
+    '''
     try:
         session_key = request.session.session_key
         if not session_key:
@@ -414,7 +475,12 @@ def clear_conversation(request):
 @csrf_protect
 @api_view(['DELETE'])
 def clear_documents(request):
-    '''Clear all documents from an index.'''
+    '''
+    Clear all documents from an index.
+    
+    :param request: HTTP request with index_name parameter
+    :return: JSON response with deletion status
+    '''
     logger_instance = logging.getLogger(__name__)
     try:
         index_name = request.query_params.get(
@@ -463,7 +529,12 @@ def clear_documents(request):
 
 @api_view(['GET'])
 def health_check(request):
-    '''Health check endpoint.'''
+    '''
+    Health check endpoint.
+    
+    :param request: HTTP request (unused)
+    :return: JSON response with service health status
+    '''
     # pylint: disable=unused-argument
     indexes = [index.name for index in DocumentIndex.objects.only('name')]
 

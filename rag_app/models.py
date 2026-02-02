@@ -1,5 +1,7 @@
 """
 Models for the RAG Document Q&A system.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import uuid
@@ -11,7 +13,13 @@ User = get_user_model()
 
 
 class DocumentIndex(models.Model):
-    '''Model to track document indexes.'''
+    '''
+    Model to track document indexes.
+    
+    Stores metadata about document indexes including name, description,
+    document count, and chunk count. Each index represents a separate
+    vector store for RAG queries.
+    '''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
@@ -21,15 +29,29 @@ class DocumentIndex(models.Model):
     chunk_count = models.IntegerField(default=0)
 
     class Meta:
-        '''Meta options for DocumentIndex model.'''
+        '''
+        Meta options for DocumentIndex model.
+        
+        Orders indexes by most recently updated first.
+        '''
         ordering = ['-updated_at']
 
     def __str__(self):
+        '''
+        String representation of the DocumentIndex.
+        
+        :return: Name of the document index
+        '''
         return str(self.name)
 
 
 class Document(models.Model):
-    '''Model to track uploaded documents.'''
+    '''
+    Model to track uploaded documents.
+    
+    Stores metadata about documents uploaded to the system including
+    file information, processing status, and associated index.
+    '''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     index = models.ForeignKey(
         DocumentIndex, on_delete=models.CASCADE, related_name='documents')
@@ -44,15 +66,29 @@ class Document(models.Model):
     processing_error = models.TextField(blank=True)
 
     class Meta:
-        '''Meta options for Document model.'''
+        '''
+        Meta options for Document model.
+        
+        Orders documents by most recently uploaded first.
+        '''
         ordering = ['-uploaded_at']
 
     def __str__(self):
+        '''
+        String representation of the Document.
+        
+        :return: Original filename of the document
+        '''
         return str(self.original_filename)
 
 
 class QuerySession(models.Model):
-    '''Model to track query sessions for conversational mode.'''
+    '''
+    Model to track query sessions for conversational mode.
+    
+    Maintains conversation history and session state for multi-turn
+    conversations with the RAG system.
+    '''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, null=True, blank=True)
@@ -62,12 +98,21 @@ class QuerySession(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        '''Meta options for QuerySession model.'''
+        '''
+        Meta options for QuerySession model.
+        
+        Orders sessions by most recently updated first.
+        '''
         ordering = ['-updated_at']
 
 
 class Query(models.Model):
-    '''Model to track individual queries.'''
+    '''
+    Model to track individual queries.
+    
+    Stores query details, answers, performance metrics, and associated
+    metadata for each question asked to the RAG system.
+    '''
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(
         QuerySession, on_delete=models.CASCADE, related_name='queries', null=True, blank=True)
@@ -86,8 +131,17 @@ class Query(models.Model):
     model_used = models.CharField(max_length=100, blank=True)
 
     class Meta:
-        '''Meta options for Query model.'''
+        '''
+        Meta options for Query model.
+        
+        Orders queries by most recently created first.
+        '''
         ordering = ['-created_at']
 
     def __str__(self):
+        '''
+        String representation of the Query.
+        
+        :return: Truncated question text (max 50 characters)
+        '''
         return f"Query: {str(self.question)[:50]}..."

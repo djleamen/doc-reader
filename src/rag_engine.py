@@ -1,5 +1,10 @@
 """
 RAG (Retrieval-Augmented Generation) engine for document Q&A.
+
+Provides core RAG functionality including document retrieval, context ranking,
+semantic coherence validation, and answer generation with conversation support.
+
+Written by DJ Leamen (2025-2026)
 """
 
 from typing import List, Dict, Any, Optional
@@ -17,7 +22,12 @@ from src.semantic_coherence import SemanticCoherenceValidator, CoherenceMetrics,
 
 @dataclass
 class QueryResult:
-    '''Result of a Q&A query.'''
+    '''
+    Result of a Q&A query.
+    
+    Contains the generated answer, source documents, confidence scores,
+    and optional coherence validation metrics.
+    '''
     query: str
     answer: str
     source_documents: List[Document]
@@ -28,9 +38,20 @@ class QueryResult:
 
 
 class RAGEngine:
-    '''Main RAG engine for document Q&A.'''
+    '''
+    Main RAG engine for document Q&A.
+    
+    Handles document ingestion, retrieval, context ranking, and answer
+    generation with optional semantic coherence validation.
+    '''
 
     def __init__(self, index_name: str = "default", enable_coherence_validation: bool = True):
+        '''
+        Initialize RAG engine.
+        
+        :param index_name: Name of the document index to use
+        :param enable_coherence_validation: Enable semantic coherence validation
+        '''
         self.index_name = index_name
         self.document_index = DocumentIndex(index_name)
         self.document_processor = DocumentProcessor()
@@ -57,7 +78,11 @@ class RAGEngine:
         logger.info(f"RAG Engine initialized with index: {index_name}")
 
     def _create_prompt_template(self) -> PromptTemplate:
-        '''Create the prompt template for Q&A.'''
+        '''
+        Create the prompt template for Q&A.
+        
+        :return: Configured PromptTemplate for answer generation
+        '''
         template = '''You are a helpful AI assistant that answers questions based on the provided context chunks from documents.
 Use only the information from the context to answer questions. If the context doesn't contain enough information
 to answer the question, say so clearly.
@@ -85,7 +110,13 @@ Answer:'''
         )
 
     def add_documents(self, file_paths: List[str], metadata: Optional[Dict[str, Any]] = None) -> int:
-        '''Add documents to the RAG system.'''
+        '''
+        Add documents to the RAG system.
+        
+        :param file_paths: List of document file paths to add
+        :param metadata: Optional metadata to attach to all documents
+        :return: Number of document chunks added
+        '''
         all_documents = []
 
         for file_path in file_paths:
@@ -109,7 +140,14 @@ Answer:'''
             return 0
 
     def _retrieve_documents(self, question: str, k: int, include_scores: bool):
-        '''Retrieve documents with optional scores.'''
+        '''
+        Retrieve documents with optional similarity scores.
+        
+        :param question: Query question text
+        :param k: Number of documents to retrieve
+        :param include_scores: Whether to include similarity scores
+        :return: Tuple of (source_documents, confidence_scores)
+        '''
         initial_k = min(k * 3, 20)
 
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
@@ -128,7 +166,13 @@ Answer:'''
         return source_documents, confidence_scores
 
     def _generate_answer(self, context: str, question: str) -> str:
-        '''Generate answer from context and question.'''
+        '''
+        Generate answer from context and question.
+        
+        :param context: Retrieved document context
+        :param question: User's question
+        :return: Generated answer text
+        '''
         prompt = self.prompt_template.format(
             context=context, question=question)
         try:
@@ -141,7 +185,15 @@ Answer:'''
 
     def _apply_coherence_boost(self, question: str, fallback_action, original_k: int,
                                include_scores: bool):
-        '''Apply k-boost fallback and regenerate answer.'''
+        '''
+        Apply k-boost fallback and regenerate answer.
+        
+        :param question: Query question text
+        :param fallback_action: FallbackAction object with boost configuration
+        :param original_k: Original k value before boost
+        :param include_scores: Whether to include similarity scores
+        :return: Tuple of (boosted_documents, boosted_scores, None)
+        '''
         if not fallback_action.boost_k or not fallback_action.new_k_value:
             return None, None, None
 
@@ -168,7 +220,19 @@ Answer:'''
     def _apply_coherence_fallbacks(self, question: str, answer: str, source_documents,
                                    confidence_scores, coherence_metrics, fallback_action,
                                    original_k: int, include_scores: bool):
-        '''Apply coherence fallback actions.'''
+        '''
+        Apply coherence fallback actions.
+        
+        :param question: Query question text
+        :param answer: Generated answer
+        :param source_documents: Retrieved source documents
+        :param confidence_scores: Similarity scores
+        :param coherence_metrics: CoherenceMetrics object
+        :param fallback_action: FallbackAction object
+        :param original_k: Original k value
+        :param include_scores: Whether scores are available
+        :return: Tuple of (final_answer, source_documents, confidence_scores)
+        '''
         if not coherence_metrics.needs_fallback:
             return answer, source_documents, confidence_scores
 
@@ -209,7 +273,18 @@ Answer:'''
     def _validate_and_apply_coherence(self, question: str, source_documents, answer: str,
                                       confidence_scores, original_k: int, include_scores: bool,
                                       enable_coherence_fallback: bool):
-        '''Validate coherence and apply fallbacks if needed.'''
+        '''
+        Validate coherence and apply fallbacks if needed.
+        
+        :param question: Query question text
+        :param source_documents: Retrieved source documents
+        :param answer: Generated answer
+        :param confidence_scores: Similarity scores
+        :param original_k: Original k value
+        :param include_scores: Whether scores are available
+        :param enable_coherence_fallback: Whether to apply fallbacks
+        :return: Tuple of (final_answer, source_documents, confidence_scores, coherence_metrics, fallback_action)
+        '''
         if not (self.enable_coherence_validation and self.coherence_validator and enable_coherence_fallback):
             return answer, source_documents, confidence_scores, None, None
 
@@ -239,7 +314,16 @@ Answer:'''
         include_scores: bool = True,
         enable_coherence_fallback: bool = True
     ) -> QueryResult:
-        '''Query the RAG system with a question.'''
+        '''
+        Query the RAG system with a question.
+        
+        :param question: User's question text
+        :param k: Number of documents to retrieve (None uses default)
+        :param include_sources: Include source documents in result
+        :param include_scores: Include similarity scores in result
+        :param enable_coherence_fallback: Enable coherence validation fallbacks
+        :return: QueryResult with answer, sources, and metadata
+        '''
         logger.info(f"Processing query: {question}")
 
         k = k or settings.top_k_results
@@ -301,7 +385,12 @@ Answer:'''
         )
 
     def _extract_question_keywords(self, question: str) -> set:
-        '''Extract meaningful keywords from question by removing stop words.'''
+        '''
+        Extract meaningful keywords from question by removing stop words.
+        
+        :param question: Question text
+        :return: Set of non-stop-word keywords
+        '''
         question_words = set(question.lower().split())
         stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at',
                       'to', 'for', 'of', 'with', 'is', 'are', 'was', 'were',
@@ -310,7 +399,14 @@ Answer:'''
 
     def _calculate_chunk_score(self, doc: Document, similarity_score: float,
                                question_keywords: set) -> tuple:
-        '''Calculate combined relevance score for a document chunk.'''
+        '''
+        Calculate combined relevance score for a document chunk.
+        
+        :param doc: Document chunk
+        :param similarity_score: Vector similarity score
+        :param question_keywords: Set of question keywords
+        :return: Tuple of (doc, combined_score, source)
+        '''
         content_lower = doc.page_content.lower()
         sim_score = float(similarity_score)
 
@@ -333,7 +429,12 @@ Answer:'''
         return (doc, combined_score, doc.metadata.get('source', 'unknown'))
 
     def _get_length_penalty(self, content_length: int) -> float:
-        '''Calculate penalty based on content length.'''
+        '''
+        Calculate penalty based on content length.
+        
+        :param content_length: Length of content in characters
+        :return: Penalty multiplier (0.8-1.0)
+        '''
         if content_length < 100:
             return 0.8  # Short chunks are less likely to be comprehensive
         elif content_length > 2000:
@@ -342,7 +443,13 @@ Answer:'''
             return 1.0
 
     def _select_diverse_chunks(self, scored_chunks: List[tuple], target_k: int) -> List[tuple]:
-        '''Select chunks with source diversity preference.'''
+        '''
+        Select chunks with source diversity preference.
+        
+        :param scored_chunks: List of (doc, score, source) tuples
+        :param target_k: Target number of chunks to select
+        :return: List of (doc, score) tuples with diverse sources
+        '''
         selected_chunks = []
         source_counts = {}
 
@@ -366,7 +473,14 @@ Answer:'''
 
     def _fill_remaining_slots(self, scored_chunks: List[tuple],
                               selected_chunks: List[tuple], target_k: int) -> List[tuple]:
-        '''Fill remaining slots with high-scoring chunks avoiding duplicates.'''
+        '''
+        Fill remaining slots with high-scoring chunks avoiding duplicates.
+        
+        :param scored_chunks: List of all scored chunks
+        :param selected_chunks: Currently selected chunks
+        :param target_k: Target number of chunks
+        :return: Updated list of selected chunks
+        '''
         for doc, score, _ in scored_chunks:
             if len(selected_chunks) >= target_k:
                 break
@@ -380,7 +494,14 @@ Answer:'''
         doc_score_pairs: List[tuple],
         target_k: int
     ) -> List[tuple]:
-        '''Rerank and filter chunks using multiple criteria.'''
+        '''
+        Rerank and filter chunks using multiple criteria.
+        
+        :param question: Query question text
+        :param doc_score_pairs: List of (document, similarity_score) tuples
+        :param target_k: Target number of chunks to return
+        :return: List of top-k (document, score) tuples after reranking
+        '''
         if not doc_score_pairs:
             return []
 
@@ -411,7 +532,14 @@ Answer:'''
         documents: List[Document],
         target_k: int
     ) -> List[Document]:
-        '''Filter chunks by relevance when scores aren't available.'''
+        '''
+        Filter chunks by relevance when scores aren't available.
+        
+        :param question: Query question text
+        :param documents: List of documents to filter
+        :param target_k: Target number of documents to return
+        :return: List of top-k most relevant documents
+        '''
         if not documents:
             return []
 
@@ -444,7 +572,12 @@ Answer:'''
         return filtered
 
     def _prepare_context(self, documents: List[Document]) -> str:
-        '''Prepare context string from retrieved documents.'''
+        '''
+        Prepare context string from retrieved documents.
+        
+        :param documents: List of retrieved documents
+        :return: Formatted context string for prompt
+        '''
         context_parts = []
 
         for i, doc in enumerate(documents, 1):
@@ -459,7 +592,13 @@ Answer:'''
         return "\n".join(context_parts)
 
     def batch_query(self, questions: List[str], **kwargs) -> List[QueryResult]:
-        '''Process multiple queries in batch.'''
+        '''
+        Process multiple queries in batch.
+        
+        :param questions: List of question strings
+        :param kwargs: Additional arguments passed to query method
+        :return: List of QueryResult objects
+        '''
         results = []
 
         for question in questions:
@@ -481,7 +620,7 @@ Answer:'''
         return results
 
     def get_index_stats(self) -> Dict[str, Any]:
-        '''Get statistics about the document index.'''
+        '''\n        Get statistics about the document index.\n        \n        :return: Dictionary with index statistics including document count\n        '''
         # This would need to be implemented based on the vector store
         # For now, return basic info
         return {
@@ -493,13 +632,17 @@ Answer:'''
         }
 
     def clear_index(self) -> None:
-        '''Clear the document index and delete all documents/chunks.'''
-        self.document_index.clear_index()
+        '''\n        Clear the document index and delete all documents/chunks.\n        \n        Removes all vectors and metadata from the vector store and\n        resets the index to empty state.\n        '''\n        self.document_index.clear_index()
         logger.info(f"Document index '{self.index_name}' cleared completely")
 
 
 class ConversationalRAG(RAGEngine):
-    '''Extended RAG engine with conversation memory.'''
+    '''
+    Extended RAG engine with conversation memory.
+    
+    Maintains conversation history for multi-turn dialogues with
+    context-aware responses.
+    '''
 
     def __init__(self, index_name: str = "default", enable_coherence_validation: bool = True):
         super().__init__(index_name, enable_coherence_validation)
@@ -507,7 +650,13 @@ class ConversationalRAG(RAGEngine):
         self.max_history_length = 10
 
     def conversational_query(self, question: str, **kwargs) -> QueryResult:
-        '''Query with conversation context.'''
+        '''
+        Query with conversation context.
+        
+        :param question: User's question text
+        :param kwargs: Additional arguments passed to query method
+        :return: QueryResult with conversation-aware answer
+        '''
         # Add conversation context to the question if history exists
         if self.conversation_history:
             context_question = self._add_conversation_context(question)
@@ -530,7 +679,12 @@ class ConversationalRAG(RAGEngine):
         return result
 
     def _add_conversation_context(self, question: str) -> str:
-        '''Add conversation history to the current question.'''
+        '''
+        Add conversation history to the current question.
+        
+        :param question: Current question text
+        :return: Question with conversation context prepended
+        '''
         if not self.conversation_history:
             return question
 
@@ -548,6 +702,10 @@ class ConversationalRAG(RAGEngine):
         return "\n".join(context_parts)
 
     def clear_conversation(self) -> None:
-        '''Clear conversation history.'''
+        '''
+        Clear conversation history.
+        
+        Resets the conversation history to empty state for a fresh session.
+        '''
         self.conversation_history = []
         logger.info("Conversation history cleared")

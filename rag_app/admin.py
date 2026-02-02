@@ -1,15 +1,22 @@
 """
 Admin configuration for RAG app models.
+Provides admin interfaces for DocumentIndex, Document, QuerySession, and Query models.
+
+Written by DJ Leamen (2025-2026)
 """
 
 from django.contrib import admin
 from django.http import HttpRequest
 from .models import DocumentIndex, Document, QuerySession, Query
 
-
 @admin.register(DocumentIndex)
 class DocumentIndexAdmin(admin.ModelAdmin):
-    '''Admin interface for DocumentIndex model.'''
+    '''
+    Admin interface for DocumentIndex model.
+    
+    Provides list display, filtering, search, and readonly field management
+    for document indexes in the Django admin interface.
+    '''
     list_display = ('name', 'description', 'document_count',
                     'chunk_count', 'created_at', 'updated_at')
     list_filter = ('created_at', 'updated_at')
@@ -21,7 +28,12 @@ class DocumentIndexAdmin(admin.ModelAdmin):
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
-    '''Admin interface for Document model.'''
+    '''
+    Admin interface for Document model.
+    
+    Provides list display, filtering, search, and readonly field management
+    for uploaded documents in the Django admin interface.
+    '''
     list_display = ('original_filename', 'index', 'file_type',
                     'file_size', 'processed', 'uploaded_at')
     list_filter = ('processed', 'file_type', 'uploaded_at', 'index')
@@ -30,6 +42,13 @@ class DocumentAdmin(admin.ModelAdmin):
     ordering = ('-uploaded_at',)
 
     def get_readonly_fields(self, request: HttpRequest, obj=None):
+        '''
+        Get readonly fields for document admin form.
+        
+        :param request: HTTP request object
+        :param obj: Document object being edited, None for new objects
+        :return: Tuple of readonly field names
+        '''
         readonly_fields = ('id', 'uploaded_at', 'file_size')
         if obj:  # editing an existing object
             return readonly_fields + ('file_path', 'chunk_count')
@@ -38,7 +57,12 @@ class DocumentAdmin(admin.ModelAdmin):
 
 @admin.register(QuerySession)
 class QuerySessionAdmin(admin.ModelAdmin):
-    '''Admin interface for QuerySession model.'''
+    '''
+    Admin interface for QuerySession model.
+    
+    Provides list display, filtering, search, and readonly field management
+    for query sessions in the Django admin interface.
+    '''
     list_display = ('session_key', 'index', 'user', 'created_at', 'updated_at')
     list_filter = ('index', 'created_at')
     search_fields = ('session_key',)
@@ -48,7 +72,12 @@ class QuerySessionAdmin(admin.ModelAdmin):
 
 @admin.register(Query)
 class QueryAdmin(admin.ModelAdmin):
-    '''Admin interface for Query model.'''
+    '''
+    Admin interface for Query model.
+    
+    Provides list display, filtering, search, and readonly field management
+    for individual queries in the Django admin interface.
+    '''
     list_display = ('question_preview', 'index', 'session',
                     'response_time', 'created_at')
     list_filter = ('index', 'created_at', 'include_sources', 'include_scores')
@@ -57,7 +86,12 @@ class QueryAdmin(admin.ModelAdmin):
     ordering = ('-created_at',)
 
     def question_preview(self, obj):
-        '''Preview of the question text.'''
+        '''
+        Provides a shortened preview of the question text.
+        
+        :param obj: Query object
+        :return: Shortened question text (max 50 characters)
+        '''
         return obj.question[:50] + '...' if len(obj.question) > 50 else obj.question
     question_preview.short_description = 'Question'  # type: ignore
 

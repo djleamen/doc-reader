@@ -1,10 +1,17 @@
 """
 Serializers for the RAG App API.
+
+Written by DJ Leamen (2025-2026)
 """
 
 from rest_framework import serializers
 class QueryRequestSerializer(serializers.Serializer):
-    '''Serializer for query requests.'''
+    '''
+    Serializer for query requests.
+    
+    Validates incoming query requests including question text,
+    index name, and query parameters.
+    '''
     question = serializers.CharField(max_length=5000, required=True)
     index_name = serializers.CharField(max_length=255, default='default')
     k = serializers.IntegerField(min_value=1, max_value=20, required=False)
@@ -21,7 +28,12 @@ class QueryRequestSerializer(serializers.Serializer):
 
 
 class DocumentUploadSerializer(serializers.Serializer):
-    '''Serializer for document upload requests.'''
+    '''
+    Serializer for document upload requests.
+    
+    Validates file uploads and target index name for document
+    ingestion into the RAG system.
+    '''
     files = serializers.ListField(
         child=serializers.FileField(),
         required=True,
@@ -39,7 +51,11 @@ class DocumentUploadSerializer(serializers.Serializer):
 
 
 class DocumentSerializer(serializers.Serializer):
-    '''Serializer for document information.'''
+    '''
+    Serializer for document information.
+    
+    Serializes document content and metadata for API responses.
+    '''
     filename = serializers.CharField()
     content = serializers.CharField()
     metadata = serializers.DictField()
@@ -54,7 +70,12 @@ class DocumentSerializer(serializers.Serializer):
 
 
 class QueryResponseSerializer(serializers.Serializer):
-    '''Serializer for query responses.'''
+    '''
+    Serializer for query responses.
+    
+    Serializes RAG query results including answer, source documents,
+    confidence scores, and metadata.
+    '''
     query = serializers.CharField()
     answer = serializers.CharField()
     source_documents = serializers.ListField(

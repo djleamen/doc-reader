@@ -1,6 +1,8 @@
 """
 Azure AI Search vector store for experimental RAG.
 Supports hybrid search (vector + keyword) and semantic ranking.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import json
@@ -45,12 +47,13 @@ class AzureSearchVectorStore:
     """
 
     def __init__(self, index_name: Optional[str] = None):
-        """
-        Initialize Azure AI Search vector store.
-
-        Args:
-            index_name: Name of the search index (default from settings)
-        """
+        '''
+        Initialize Azure Search vector store.
+        
+        :param self: AzureSearchVectorStore instance
+        :param index_name: Name of the search index (uses default from settings if None)
+        :type index_name: Optional[str]
+        '''
         self.settings = azure_settings
         self.index_name = index_name or self.settings.search_index_name
         self.openai_service = get_azure_openai_service()
@@ -64,7 +67,11 @@ class AzureSearchVectorStore:
         self._ensure_index_exists()
 
     def _initialize_clients(self) -> None:
-        """Initialize Azure AI Search clients with proper authentication."""
+        '''
+        Initialize Azure Search index and search clients.
+
+        :param self: AzureSearchVectorStore instance
+        '''
         try:
             endpoint = self.settings.search_endpoint
 
@@ -110,12 +117,13 @@ class AzureSearchVectorStore:
             raise
 
     def _create_index_schema(self) -> SearchIndex:
-        """
-        Create index schema with vector search and semantic ranking.
-
-        Returns:
-            SearchIndex definition
-        """
+        '''
+        Create the search index schema.
+        
+        :param self: AzureSearchVectorStore instance
+        :return: SearchIndex definition with fields, vector search, and semantic config
+        :rtype: SearchIndex
+        '''
         # Define fields
         fields = [
             SearchField(
@@ -209,7 +217,11 @@ class AzureSearchVectorStore:
         return index
 
     def _ensure_index_exists(self) -> None:
-        """Create index if it doesn't exist."""
+        '''
+        Ensure the search index exists, create if not.
+        
+        :param self: AzureSearchVectorStore instance
+        '''
         if not self.index_client:
             raise RuntimeError("Index client not initialized")
 
@@ -230,15 +242,15 @@ class AzureSearchVectorStore:
             raise
 
     def add_documents(self, documents: List[Document]) -> Dict[str, Any]:
-        """
+        '''
         Add documents to the search index.
-
-        Args:
-            documents: List of LangChain documents
-
-        Returns:
-            Dict with status and count of added documents
-        """
+        
+        :param self: AzureSearchVectorStore instance
+        :param documents: List of LangChain documents to add
+        :type documents: List[Document]
+        :return: Dictionary with status, count of added documents, and elapsed time
+        :rtype: Dict[str, Any]
+        '''
         if not documents:
             return {"status": "success", "count": 0}
 
@@ -314,18 +326,21 @@ class AzureSearchVectorStore:
         use_hybrid: Optional[bool] = None,
         use_semantic: Optional[bool] = None,
     ) -> List[Document]:
-        """
+        '''
         Search for similar documents.
-
-        Args:
-            query: Search query
-            k: Number of results to return
-            use_hybrid: Use hybrid search (vector + keyword)
-            use_semantic: Use semantic ranking
-
-        Returns:
-            List of matching documents
-        """
+        
+        :param self: AzureSearchVectorStore instance
+        :param query: Search query string
+        :type query: str
+        :param k: Number of results to return
+        :type k: int
+        :param use_hybrid: Whether to use hybrid search (vector + keyword)
+        :type use_hybrid: Optional[bool]
+        :param use_semantic: Whether to use semantic ranking
+        :type use_semantic: Optional[bool]
+        :return: List of matching LangChain documents with metadata
+        :rtype: List[Document]
+        '''
         if not self.search_client:
             raise RuntimeError(_SEARCH_CLIENT_NOT_INITIALIZED)
 
@@ -387,15 +402,15 @@ class AzureSearchVectorStore:
             raise
 
     def delete_documents(self, filter_query: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Delete documents from index.
-
-        Args:
-            filter_query: OData filter query (e.g., "source eq 'document.pdf'")
-
-        Returns:
-            Dict with deletion status
-        """
+        '''
+        Delete documents from the search index.
+        
+        :param self: AzureSearchVectorStore instance
+        :param filter_query: OData filter query (e.g., "source eq 'document.pdf'"), deletes all if None
+        :type filter_query: Optional[str]
+        :return: Dictionary with deletion status and count
+        :rtype: Dict[str, Any]
+        '''
         if not self.search_client:
             raise RuntimeError(_SEARCH_CLIENT_NOT_INITIALIZED)
 
@@ -432,12 +447,13 @@ class AzureSearchVectorStore:
             raise
 
     def get_stats(self) -> Dict[str, Any]:
-        """
+        '''
         Get index statistics.
-
-        Returns:
-            Dict with index stats
-        """
+        
+        :param self: AzureSearchVectorStore instance
+        :return: Dictionary with index name, document count, and endpoint
+        :rtype: Dict[str, Any]
+        '''
         if not self.search_client:
             raise RuntimeError(_SEARCH_CLIENT_NOT_INITIALIZED)
 
@@ -464,13 +480,12 @@ class AzureSearchVectorStore:
 
 
 def get_azure_search_vector_store(index_name: Optional[str] = None) -> AzureSearchVectorStore:
-    """
-    Get or create Azure Search vector store instance.
-
-    Args:
-        index_name: Name of the search index
-
-    Returns:
-        AzureSearchVectorStore instance
-    """
+    '''
+    Get an Azure Search vector store instance.
+    
+    :param index_name: Name of the search index to use
+    :type index_name: Optional[str]
+    :return: AzureSearchVectorStore instance
+    :rtype: AzureSearchVectorStore
+    '''
     return AzureSearchVectorStore(index_name=index_name)

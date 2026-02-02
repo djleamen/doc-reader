@@ -1,5 +1,10 @@
 """
 Configuration management for the RAG Document Q&A system.
+
+Provides centralized settings management with environment variable support
+for API keys, model configuration, and system parameters.
+
+Written by DJ Leamen (2025-2026)
 """
 
 import os
@@ -10,9 +15,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
-    '''Application settings with environment variable support.'''
+    '''
+    Application settings with environment variable support.
+    
+    Loads configuration from environment variables with sensible defaults
+    for all system parameters.
+    '''
 
     def __init__(self):
+        '''
+        Initialize settings from environment variables.
+        
+        Loads all configuration values with appropriate type conversion
+        and default values.
+        '''
         # API Keys
         self.openai_api_key = os.getenv("OPENAI_API_KEY", "")
         self.pinecone_api_key = os.getenv("PINECONE_API_KEY")
@@ -58,7 +74,11 @@ class Settings:
 
     @property
     def supported_formats_list(self) -> List[str]:
-        '''Get supported formats as a list.'''
+        '''
+        Get supported formats as a list.
+        
+        :return: List of supported file format extensions
+        '''
         return [fmt.strip() for fmt in self.supported_formats.split(',')]
 
 

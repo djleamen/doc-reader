@@ -1,5 +1,10 @@
 """
 Document processing utilities for various file formats.
+
+Provides document loading, text extraction, and chunking capabilities
+for PDF, DOCX, TXT, and Markdown files.
+
+Written by DJ Leamen (2025-2026)
 """
 
 from pathlib import Path
@@ -15,9 +20,19 @@ from src.config import settings
 
 
 class DocumentProcessor:
-    '''Handles document loading, processing, and chunking.'''
+    '''
+    Handles document loading, processing, and chunking.
+    
+    Supports multiple document formats and provides configurable
+    text chunking for vector storage.
+    '''
 
     def __init__(self):
+        '''
+        Initialize document processor.
+        
+        Creates text splitter with configured chunk size and overlap.
+        '''
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
@@ -26,7 +41,14 @@ class DocumentProcessor:
         )
 
     def load_document(self, file_path: str) -> str:
-        '''Load and extract text from various document formats.'''
+        '''
+        Load and extract text from various document formats.
+        
+        :param file_path: Path to the document file
+        :return: Extracted text content
+        :raises FileNotFoundError: If document file not found
+        :raises ValueError: If file format unsupported or file too large
+        '''
         path_obj = Path(file_path)
 
         if not path_obj.exists():
@@ -55,7 +77,12 @@ class DocumentProcessor:
             raise ValueError(f"Handler not implemented for: {file_extension}")
 
     def _load_pdf(self, file_path: Path) -> str:
-        '''Extract text from PDF files.'''
+        '''
+        Extract text from PDF files.
+        
+        :param file_path: Path to PDF file
+        :return: Extracted text content with page markers
+        '''
         text = ""
         try:
             with open(file_path, 'rb') as file:
@@ -75,7 +102,12 @@ class DocumentProcessor:
         return text.strip()
 
     def _load_docx(self, file_path: Path) -> str:
-        '''Extract text from DOCX files.'''
+        '''
+        Extract text from DOCX files.
+        
+        :param file_path: Path to DOCX file
+        :return: Extracted text from paragraphs and tables
+        '''
         try:
             doc = Document(str(file_path))
             text = ""
@@ -96,7 +128,12 @@ class DocumentProcessor:
             raise
 
     def _load_text(self, file_path: Path) -> str:
-        '''Load plain text files.'''
+        '''
+        Load plain text files.
+        
+        :param file_path: Path to text file
+        :return: Text content
+        '''
         try:
             with open(file_path, 'r', encoding='utf-8') as file:
                 return file.read().strip()
@@ -106,7 +143,13 @@ class DocumentProcessor:
                 return file.read().strip()
 
     def chunk_document(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> List[LangChainDocument]:
-        '''Split document into chunks for vector storage.'''
+        '''
+        Split document into chunks for vector storage.
+        
+        :param text: Document text to chunk
+        :param metadata: Optional metadata to attach to chunks
+        :return: List of LangChain Document objects with chunks
+        '''
         if metadata is None:
             metadata = {}
 
@@ -128,7 +171,13 @@ class DocumentProcessor:
         return documents
 
     def process_document(self, file_path: str, additional_metadata: Optional[Dict[str, Any]] = None) -> List[LangChainDocument]:
-        '''Complete document processing pipeline.'''
+        '''
+        Complete document processing pipeline.
+        
+        :param file_path: Path to document file
+        :param additional_metadata: Optional metadata to add to document chunks
+        :return: List of processed document chunks with metadata
+        '''
         path_obj = Path(file_path)
 
         # Load document text
