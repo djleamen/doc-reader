@@ -169,7 +169,7 @@ def _handle_clear_command(rag_engine, args):
     if args.conversational:
         assert isinstance(rag_engine, ConversationalRAG)
         rag_engine.clear_conversation()
-        print("💭 Conversation history cleared!")
+        print("Conversation history cleared.")
         return True
     return False
 
@@ -182,7 +182,7 @@ def _process_interactive_question(rag_engine, question, args):
     :param question: User's question text
     :param args: Command-line arguments for query options
     '''
-    print("🔍 Searching for answer...")
+    print("Searching for answer...")
 
     if args.conversational:
         assert isinstance(rag_engine, ConversationalRAG)
@@ -200,10 +200,10 @@ def _process_interactive_question(rag_engine, question, args):
             include_scores=False
         )
 
-    print(f"\n💬 Answer: {result.answer}")
+    print(f"\nAnswer: {result.answer}")
 
     if args.verbose:
-        print(f"\n📊 Retrieved {result.metadata.get('retrieval_count', 0)} relevant documents")
+        print(f"\nRetrieved {result.metadata.get('retrieval_count', 0)} relevant documents")
 
 
 def interactive_mode(args):
@@ -219,10 +219,10 @@ def interactive_mode(args):
 
     if args.conversational:
         rag_engine = ConversationalRAG(args.index_name)
-        print("🤖 Conversational RAG Mode - Your questions will be remembered!")
+        print("Conversational RAG mode - your questions will be remembered.")
     else:
         rag_engine = RAGEngine(args.index_name)
-        print("🤖 RAG Q&A Mode - Ask questions about your documents!")
+        print("RAG Q&A mode - ask questions about your documents.")
 
     print("Type 'quit', 'exit', or 'bye' to exit.")
     print("Type 'clear' to clear conversation history (conversational mode only).")
@@ -230,10 +230,10 @@ def interactive_mode(args):
 
     while True:
         try:
-            question = input("\n❓ Your question: ").strip()
+            question = input("\nYour question: ").strip()
 
             if question.lower() in ['quit', 'exit', 'bye']:
-                print("👋 Goodbye!")
+                print("Goodbye.")
                 break
 
             if question.lower() == 'clear':
@@ -246,7 +246,7 @@ def interactive_mode(args):
             _process_interactive_question(rag_engine, question, args)
 
         except KeyboardInterrupt:
-            print("\n👋 Goodbye!")
+            print("\nGoodbye.")
             break
         except Exception as e:
             logger.error(f"Error processing question: {e}")

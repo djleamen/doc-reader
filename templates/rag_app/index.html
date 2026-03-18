@@ -1,12 +1,15 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="row">
+<div class="row g-4">
     
     <!-- Sidebar -->
-    <div class="col-md-3">
+    <div class="col-lg-4 col-xl-3">
         <div class="glass-card">
-            <h5 class="text-white"><i class="fas fa-cog"></i> Configuration</h5>
+            <div class="section-heading">
+                <h5 class="text-white mb-0"><i class="fas fa-cog"></i> Configuration</h5>
+            </div>
+            <p class="panel-caption">Tune retrieval, inspect the active index, and swap pipelines without leaving the workspace.</p>
             
             <!-- Pipeline Selection -->
             <fieldset class="mb-4">
@@ -108,11 +111,14 @@
     </div>
     
     <!-- Main Content -->
-    <div class="col-md-9">
+    <div class="col-lg-8 col-xl-9">
         
         <!-- Document Upload Section -->
         <div class="glass-card">
-            <h5 class="text-white"><i class="fas fa-upload"></i> Upload Documents</h5>
+            <div class="section-heading">
+                <h5 class="text-white mb-0"><i class="fas fa-upload"></i> Upload Documents</h5>
+            </div>
+            <p class="panel-caption">Drop in source files, rebuild your index, and keep the retrieval surface focused on the right material.</p>
             
             <form id="uploadForm" enctype="multipart/form-data">
                 {% csrf_token %}
@@ -162,7 +168,10 @@
         
         <!-- Query Section -->
         <div class="glass-card">
-            <h5 class="text-white"><i class="fas fa-question-circle"></i> Ask Questions</h5>
+            <div class="section-heading">
+                <h5 class="text-white mb-0"><i class="fas fa-question-circle"></i> Ask Questions</h5>
+            </div>
+            <p class="panel-caption">Ask direct definitions, extract specific phrases, or compare ideas across multiple course files.</p>
             
             <!-- Sample Questions -->
             <div class="mb-3">
@@ -176,16 +185,16 @@
                 </h6>
                 
                 <div class="collapse" id="sampleQuestions">
-                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
+                    <button class="sample-question btn btn-link text-start w-100" type="button" data-question="What are the main topics covered in the documents?">
                         What are the main topics covered in the documents?
                     </button>
-                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
+                    <button class="sample-question btn btn-link text-start w-100" type="button" data-question="Can you summarize the key findings?">
                         Can you summarize the key findings?
                     </button>
-                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
+                    <button class="sample-question btn btn-link text-start w-100" type="button" data-question="What methodology was used in the research?">
                         What methodology was used in the research?
                     </button>
-                    <button class="sample-question btn btn-link text-start w-100" onclick="setQuestion(this)" type="button">
+                    <button class="sample-question btn btn-link text-start w-100" type="button" data-question="What are the conclusions and recommendations?">
                         What are the conclusions and recommendations?
                     </button>
                 </div>
@@ -219,7 +228,10 @@
             
             <!-- Answer -->
             <div class="glass-card">
-                <h5 class="text-white"><i class="fas fa-comment-dots"></i> Answer</h5>
+                <div class="section-heading">
+                    <h5 class="text-white mb-0"><i class="fas fa-comment-dots"></i> Answer</h5>
+                </div>
+                <p class="panel-caption">Generated from the retrieved chunks below. If retrieval is weak, the answer quality will be too.</p>
                 <div id="answerContent" class="text-white"></div>
             </div>
             
@@ -243,7 +255,10 @@
             
             <!-- Source Documents -->
             <div id="sourceDocuments" class="glass-card hidden">
-                <h5 class="text-white"><i class="fas fa-book"></i> Source Chunks</h5>
+                <div class="section-heading">
+                    <h5 class="text-white mb-0"><i class="fas fa-book"></i> Source Chunks</h5>
+                </div>
+                <p class="panel-caption">Review the exact passages that were surfaced and confirm the answer is grounded in the right evidence.</p>
                 <div id="sourceList">
                     <!-- Source documents will be populated by JavaScript -->
                 </div>
@@ -255,24 +270,6 @@
     
 </div>
 
-<!-- Conversation History Modal -->
-<div class="modal fade" id="conversationModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content modal-glass">
-            <div class="modal-header border-0">
-                <h5 class="modal-title text-white">
-                    <i class="fas fa-comments"></i> Conversation History
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" title="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="conversationHistory" class="text-white">
-                    <!-- Conversation history will be populated here -->
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -347,8 +344,8 @@ function displayQueryResults(response) {
             </div>
             <div class="col-md-3">
                 <div class="stat-card">
-                    <div class="stat-value">${response.metadata.context_length || 0}</div>
-                    <small>Context Length</small>
+                    <div class="stat-value">${response.metadata.exact_match_chunks || 0}</div>
+                    <small>Exact Matches</small>
                 </div>
             </div>
             <div class="col-md-3">
@@ -359,8 +356,8 @@ function displayQueryResults(response) {
             </div>
             <div class="col-md-3">
                 <div class="stat-card">
-                    <div class="stat-value">${response.metadata.prompt_length || 0}</div>
-                    <small>Prompt Length</small>
+                    <div class="stat-value">${response.metadata.context_length || 0}</div>
+                    <small>Context Length</small>
                 </div>
             </div>
         `;
@@ -375,9 +372,9 @@ function displayQueryResults(response) {
                        response.confidence_scores[index] : null;
             
             sourcesHtml += `
-                <div class="accordion-item mb-3" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
-                    <h6 class="accordion-header">
-                        <button class="btn w-100 text-start text-white" type="button" 
+                <div class="accordion-item mb-3 source-accordion-item">
+                    <h6 class="accordion-header source-accordion-header">
+                        <button class="btn w-100 text-start text-white source-accordion-button" type="button" 
                                 data-bs-toggle="collapse" data-bs-target="#source${index}">
                             <i class="fas fa-file-alt"></i> 
                             Chunk ${index + 1} - ${doc.metadata.filename || 'Unknown'}
@@ -419,30 +416,6 @@ function displayQueryError(error) {
     `).show();
 }
 
-globalThis.removeFile = function(index) {
-    const fileInputEl = document.getElementById('fileInput');
-    const changeEvent = new Event('change', { bubbles: true });
-    
-    // Update the file input element
-    if (fileInputEl && fileInputEl.files) {
-        const dt = new DataTransfer();
-        const files = Array.from(fileInputEl.files);
-        
-        for (const [i, file] of files.entries()) {
-            if (i !== index) {
-                dt.items.add(file);
-            }
-        }
-        
-        fileInputEl.files = dt.files;
-        fileInputEl.dispatchEvent(changeEvent);
-    }
-}
-
-globalThis.setQuestion = function(element) {
-    $('#questionInput').val($(element).text().trim());
-}
-
 function updatePipelineBadge() {
     const badge = $('#pipelineBadge');
     if (currentPipeline === 'azure') {
@@ -471,6 +444,7 @@ function clearConversation() {
     $.ajax({
         url: getApiEndpoint('clear-conversation'),
         type: 'DELETE',
+        data: { index_name: $('#indexSelect').val() },
         headers: {
             'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
         },
@@ -484,7 +458,7 @@ function clearConversation() {
 }
 
 function clearAllDocuments(currentIndexName) {
-    if (!confirm(`⚠️ WARNING: This will permanently delete all documents and chunks from the "${currentIndexName}" index.\n\nThis action cannot be undone. Are you sure you want to continue?`)) {
+    if (!confirm(`Warning: this will permanently delete all documents and chunks from the "${currentIndexName}" index.\n\nThis action cannot be undone. Are you sure you want to continue?`)) {
         return;
     }
     
@@ -530,8 +504,10 @@ $(document).ready(function() {
                 $('#fileInput').click();
             }
         });
-        
+
         $('#fileInput').on('change', handleFileSelection);
+        $('#sampleQuestions').on('click', '.sample-question', handleSampleQuestion);
+        $('#fileList').on('click', '.remove-file', handleFileRemoval);
         
         // Drag and drop
         $('#dragDropArea').on('dragover', function(e) {
@@ -590,6 +566,10 @@ $(document).ready(function() {
         if (selectedFiles.length > 0) {
             displaySelectedFiles();
             $('#uploadBtn').prop('disabled', false);
+        } else {
+            $('#fileList').empty();
+            $('#selectedFiles').hide();
+            $('#uploadBtn').prop('disabled', true);
         }
     }
     
@@ -604,7 +584,7 @@ $(document).ready(function() {
                         <i class="fas fa-file"></i> ${file.name} 
                         <small>(${(file.size / 1024 / 1024).toFixed(2)} MB)</small>
                     </span>
-                    <button class="btn btn-sm btn-outline-danger" onclick="globalThis.removeFile(${index})" title="Remove file" type="button">
+                    <button class="btn btn-sm btn-outline-danger remove-file" data-file-index="${index}" title="Remove file" type="button">
                         <i class="fas fa-times"></i>
                     </button>
                 </li>
@@ -613,6 +593,31 @@ $(document).ready(function() {
         }
         
         $('#selectedFiles').show();
+    }
+
+    function handleSampleQuestion() {
+        $('#questionInput').val($(this).data('question'));
+    }
+
+    function handleFileRemoval() {
+        const index = Number.parseInt($(this).data('file-index'), 10);
+        const fileInputEl = document.getElementById('fileInput');
+
+        if (!fileInputEl || !fileInputEl.files) {
+            return;
+        }
+
+        const dt = new DataTransfer();
+        const files = Array.from(fileInputEl.files);
+
+        for (const [fileIndex, file] of files.entries()) {
+            if (fileIndex !== index) {
+                dt.items.add(file);
+            }
+        }
+
+        fileInputEl.files = dt.files;
+        fileInputEl.dispatchEvent(new Event('change', { bubbles: true }));
     }
     
     function uploadDocuments() {
@@ -642,7 +647,7 @@ $(document).ready(function() {
                 xhr.upload.addEventListener("progress", function(evt) {
                     if (evt.lengthComputable) {
                         let percentComplete = evt.loaded / evt.total * 100;
-                        $('.progress-bar').css('width', percentComplete + '%');
+                        $('#uploadProgress progress').val(percentComplete);
                     }
                 }, false);
                 return xhr;
@@ -662,7 +667,7 @@ $(document).ready(function() {
             },
             complete: function() {
                 $('#uploadProgress').hide();
-                $('.progress-bar').css('width', '0%');
+                $('#uploadProgress progress').val(0);
             }
         });
     }

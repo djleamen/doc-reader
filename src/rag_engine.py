@@ -7,6 +7,7 @@ semantic coherence validation, and answer generation with conversation support.
 Written by DJ Leamen (2025-2026)
 """
 
+import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from langchain_openai import ChatOpenAI
@@ -88,6 +89,8 @@ Use only the information from the context to answer questions. If the context do
 to answer the question, say so clearly.
 
 Note: The context below consists of relevant text chunks (segments) extracted from larger documents.
+If a chunk contains the queried term, a direct definition, or an exact phrase match, prioritize that evidence.
+Do not say a term is missing when it appears with line breaks, repeated headings, or light formatting noise.
 
 Context chunks:
 {context}
@@ -100,7 +103,8 @@ Instructions:
 3. If the context is insufficient, state this clearly
 4. Provide a comprehensive answer when possible
 5. If there are multiple relevant chunks, synthesize them
-6. Respond in paragraph format, avoid using markdown
+6. Prefer direct definitions when the context contains one
+7. Respond in paragraph format, avoid using markdown
 
 Answer:'''
 
@@ -176,9 +180,12 @@ Answer:'''
         prompt = self.prompt_template.format(
             context=context, question=question)
         try:
-            answer = self.llm.predict(prompt)
+            response = self.llm.invoke(prompt)
+            answer = getattr(response, "content", response)
+            if not isinstance(answer, str):
+                answer = str(answer)
             logger.info("Successfully generated answer")
-            return answer
+            return answer.strip()
         except Exception as e:
             logger.error(f"Error generating answer: {e}")
             return "I encountered an error while generating the answer. Please try again."
@@ -206,10 +213,15 @@ Answer:'''
         if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
             boosted_doc_score_pairs = self.document_index.search_with_scores(
                 question, fallback_action.new_k_value)
+            boosted_pairs = self._rerank_and_filter_chunks(
+                question,
+                boosted_doc_score_pairs,
+                target_k=fallback_action.new_k_value,
+            )
             boosted_source_documents = [
-                doc for doc, score in boosted_doc_score_pairs]
+                doc for doc, score in boosted_pairs]
             boosted_confidence_scores = [
-                float(score) for doc, score in boosted_doc_score_pairs]
+                float(score) for doc, score in boosted_pairs]
         else:
             boosted_source_documents = self.document_index.search(
                 question, fallback_action.new_k_value)
@@ -244,7 +256,7 @@ Answer:'''
             question, fallback_action, original_k, include_scores)
 
         if boosted_docs and len(boosted_docs) > len(source_documents):
-            boosted_context = self._prepare_context(boosted_docs)
+            boosted_context = self._prepare_context(boosted_docs, question)
             try:
                 boosted_answer = self._generate_answer(
                     boosted_context, question)
@@ -344,7 +356,7 @@ Answer:'''
             )
 
         # Generate answer
-        context = self._prepare_context(source_documents)
+        context = self._prepare_context(source_documents, question)
         answer = self._generate_answer(context, question)
 
         # Validate coherence and apply fallbacks
@@ -355,14 +367,23 @@ Answer:'''
             )
 
         # Prepare metadata
+        final_context = self._prepare_context(source_documents, question)
+        phrase_candidates = self._extract_phrase_candidates(question)
+
         metadata = {
             "retrieval_count": len(source_documents),
-            "context_length": len(context),
-            "prompt_length": len(self.prompt_template.format(context=context, question=question)),
+            "context_length": len(final_context),
+            "prompt_length": len(self.prompt_template.format(context=final_context, question=question)),
             "model_used": settings.chat_model,
             "original_k": original_k,
             "final_k": len(source_documents),
-            "coherence_validation_enabled": self.enable_coherence_validation
+            "coherence_validation_enabled": self.enable_coherence_validation,
+            "exact_match_chunks": sum(
+                1 for doc in source_documents
+                if self._get_phrase_match_score(
+                    self._normalize_text(doc.page_content), phrase_candidates
+                ) > 0
+            ),
         }
 
         if coherence_metrics:
@@ -384,6 +405,16 @@ Answer:'''
             fallback_action=fallback_action
         )
 
+    def _normalize_text(self, text: str) -> str:
+        '''
+        Normalize text for keyword and phrase matching.
+
+        :param text: Source text
+        :return: Lowercased text with punctuation collapsed to spaces
+        '''
+        normalized = re.sub(r'[^a-z0-9]+', ' ', text.lower())
+        return re.sub(r'\s+', ' ', normalized).strip()
+
     def _extract_question_keywords(self, question: str) -> set:
         '''
         Extract meaningful keywords from question by removing stop words.
@@ -391,14 +422,108 @@ Answer:'''
         :param question: Question text
         :return: Set of non-stop-word keywords
         '''
-        question_words = set(question.lower().split())
+        question_words = set(self._normalize_text(question).split())
         stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at',
                       'to', 'for', 'of', 'with', 'is', 'are', 'was', 'were',
-                      'what', 'when', 'where', 'who', 'why', 'how', 'which'}
+                      'what', 'when', 'where', 'who', 'why', 'how', 'which',
+                      'does', 'do', 'did', 'can', 'could', 'should', 'would',
+                      'explain', 'define', 'describe', 'tell', 'about'}
         return question_words - stop_words
 
+    def _extract_phrase_candidates(self, question: str) -> List[str]:
+        '''
+        Build phrase candidates that should receive exact-match boosts.
+
+        :param question: Query text
+        :return: Ordered list of normalized phrase candidates
+        '''
+        normalized_question = self._normalize_text(question)
+        if not normalized_question:
+            return []
+
+        candidates = []
+        trimmed_question = normalized_question
+        leading_patterns = (
+            'what is ', 'what are ', 'who is ', 'who are ', 'where is ',
+            'where are ', 'define ', 'explain ', 'describe ',
+            'tell me about ', 'give me ', 'show me ',
+        )
+
+        for pattern in leading_patterns:
+            if trimmed_question.startswith(pattern):
+                trimmed_question = trimmed_question[len(pattern):].strip()
+                break
+
+        if len(trimmed_question.split()) >= 2:
+            candidates.append(trimmed_question)
+
+        keyword_phrase = ' '.join(
+            word for word in normalized_question.split()
+            if word in self._extract_question_keywords(question)
+        ).strip()
+        if len(keyword_phrase.split()) >= 2 and keyword_phrase not in candidates:
+            candidates.append(keyword_phrase)
+
+        if normalized_question not in candidates:
+            candidates.append(normalized_question)
+
+        return candidates
+
+    def _normalize_vector_score(self, raw_score: float) -> float:
+        '''
+        Convert raw vector-store score to a relevance-oriented score.
+
+        FAISS returns distance-like scores where smaller is better.
+
+        :param raw_score: Raw score from vector search
+        :return: Relevance score where larger is better
+        '''
+        distance = max(float(raw_score), 0.0)
+        return 1.0 / (1.0 + distance)
+
+    def _get_phrase_match_score(self, content_normalized: str, phrase_candidates: List[str]) -> float:
+        '''
+        Score exact phrase matches after normalization.
+
+        :param content_normalized: Normalized chunk content
+        :param phrase_candidates: Query-derived phrase candidates
+        :return: Phrase match score between 0 and 1
+        '''
+        for phrase in phrase_candidates:
+            if phrase and phrase in content_normalized:
+                if content_normalized.startswith(phrase):
+                    return 1.0
+                return 0.9
+        return 0.0
+
+    def _describe_match_signals(self, content: str, question: str) -> str:
+        '''
+        Describe lexical match signals to help the answer-generation prompt.
+
+        :param content: Chunk content
+        :param question: Query text
+        :return: Short signal summary
+        '''
+        content_normalized = self._normalize_text(content)
+        question_keywords = self._extract_question_keywords(question)
+        phrase_candidates = self._extract_phrase_candidates(question)
+        keyword_matches = sorted(question_keywords & set(content_normalized.split()))
+        exact_phrase_match = self._get_phrase_match_score(
+            content_normalized, phrase_candidates
+        ) > 0
+
+        signals = []
+        if exact_phrase_match:
+            signals.append("exact phrase match")
+        if keyword_matches:
+            signals.append(
+                f"keyword overlap {len(keyword_matches)}/{max(len(question_keywords), 1)}"
+            )
+
+        return ", ".join(signals) if signals else "semantic match only"
+
     def _calculate_chunk_score(self, doc: Document, similarity_score: float,
-                               question_keywords: set) -> tuple:
+                               question_keywords: set, phrase_candidates: List[str]) -> tuple:
         '''
         Calculate combined relevance score for a document chunk.
         
@@ -407,23 +532,34 @@ Answer:'''
         :param question_keywords: Set of question keywords
         :return: Tuple of (doc, combined_score, source)
         '''
-        content_lower = doc.page_content.lower()
-        sim_score = float(similarity_score)
+        content_normalized = self._normalize_text(doc.page_content)
+        vector_score = self._normalize_vector_score(similarity_score)
 
         # Keyword overlap bonus
-        content_words = set(content_lower.split())
+        content_words = set(content_normalized.split())
         keyword_matches = len(question_keywords & content_words)
         keyword_score = min(
             keyword_matches / max(len(question_keywords), 1), 1.0)
+
+        # Exact phrase matches should dominate straightforward definition lookups.
+        phrase_match_score = self._get_phrase_match_score(
+            content_normalized, phrase_candidates
+        )
+
+        # Bonus when every keyword appears in the chunk, even if formatting is noisy.
+        all_keywords_present = bool(question_keywords) and question_keywords.issubset(content_words)
+        coverage_bonus = 1.0 if all_keywords_present else 0.0
 
         # Content length penalty
         length_penalty = self._get_length_penalty(len(doc.page_content))
 
         # Combined score
         combined_score = (
-            sim_score * 0.6 +
-            keyword_score * 0.3 +
-            length_penalty * 0.1
+            vector_score * 0.25 +
+            keyword_score * 0.2 +
+            phrase_match_score * 0.45 +
+            coverage_bonus * 0.05 +
+            length_penalty * 0.05
         )
 
         return (doc, combined_score, doc.metadata.get('source', 'unknown'))
@@ -507,11 +643,12 @@ Answer:'''
 
         # Extract keywords for relevance scoring
         question_keywords = self._extract_question_keywords(question)
+        phrase_candidates = self._extract_phrase_candidates(question)
 
         # Calculate enhanced scores for each chunk
         scored_chunks = [
             self._calculate_chunk_score(
-                doc, similarity_score, question_keywords)
+                doc, similarity_score, question_keywords, phrase_candidates)
             for doc, similarity_score in doc_score_pairs
         ]
 
@@ -543,13 +680,12 @@ Answer:'''
         if not documents:
             return []
 
-        question_lower = question.lower()
-        question_words = set(question_lower.split())
+        question_words = set(self._normalize_text(question).split())
 
         # Calculate relevance scores
         scored_docs = []
         for doc in documents:
-            content_lower = doc.page_content.lower()
+            content_lower = self._normalize_text(doc.page_content)
 
             # Count keyword matches
             content_words = set(content_lower.split())
@@ -571,11 +707,12 @@ Answer:'''
 
         return filtered
 
-    def _prepare_context(self, documents: List[Document]) -> str:
+    def _prepare_context(self, documents: List[Document], question: Optional[str] = None) -> str:
         '''
         Prepare context string from retrieved documents.
         
         :param documents: List of retrieved documents
+        :param question: Optional query text used to annotate lexical match signals
         :return: Formatted context string for prompt
         '''
         context_parts = []
@@ -584,9 +721,17 @@ Answer:'''
             # Extract source info
             source = doc.metadata.get('source', 'Unknown')
             chunk_id = doc.metadata.get('chunk_id', i)
+            signal_text = ""
+            if question:
+                signal_text = (
+                    f"Match signals: {self._describe_match_signals(doc.page_content, question)}\n"
+                )
 
             # Format document chunk
-            context_part = f"Document {i} (Source: {source}, Chunk: {chunk_id}):\n{doc.page_content}\n"
+            context_part = (
+                f"Document {i} (Source: {source}, Chunk: {chunk_id}):\n"
+                f"{signal_text}{doc.page_content}\n"
+            )
             context_parts.append(context_part)
 
         return "\n".join(context_parts)
@@ -620,7 +765,11 @@ Answer:'''
         return results
 
     def get_index_stats(self) -> Dict[str, Any]:
-        '''\n        Get statistics about the document index.\n        \n        :return: Dictionary with index statistics including document count\n        '''
+        '''
+        Get statistics about the document index.
+
+        :return: Dictionary with index statistics including document count
+        '''
         # This would need to be implemented based on the vector store
         # For now, return basic info
         return {
@@ -632,7 +781,13 @@ Answer:'''
         }
 
     def clear_index(self) -> None:
-        '''\n        Clear the document index and delete all documents/chunks.\n        \n        Removes all vectors and metadata from the vector store and\n        resets the index to empty state.\n        '''\n        self.document_index.clear_index()
+        '''
+        Clear the document index and delete all documents/chunks.
+
+        Removes all vectors and metadata from the vector store and
+        resets the index to empty state.
+        '''
+        self.document_index.clear_index()
         logger.info(f"Document index '{self.index_name}' cleared completely")
 
 

@@ -353,7 +353,7 @@ class SemanticCoherenceValidator:
             action.hedge_output = True
             action.flag_uncertainty = True
             action.uncertainty_message = (
-                "⚠️ Low confidence in answer due to semantic inconsistency. "
+                "Low confidence in answer due to semantic inconsistency. "
                 "Consider rephrasing your question or providing more context."
             )
 
@@ -406,9 +406,9 @@ class SemanticCoherenceValidator:
                 "From the relevant sections I found, "
             ],
             CoherenceLevel.CRITICAL: [
-                "⚠️ With limited confidence, ",
-                "⚠️ Based on potentially incomplete information, ",
-                "⚠️ The available context suggests, though with uncertainty, "
+                "With limited confidence, ",
+                "Based on potentially incomplete information, ",
+                "The available context suggests, though with uncertainty, "
             ]
         }
 

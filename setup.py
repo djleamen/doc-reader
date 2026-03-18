@@ -23,7 +23,7 @@ def run_command(command, description):
         subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error: {e}")
+        print(f"Error: {e}")
         print(f"Output: {e.stdout}")
         print(f"Error: {e.stderr}")
         return False
@@ -37,7 +37,7 @@ def check_python_version():
     '''
     version = sys.version_info
     if version.major < 3 or (version.major == 3 and version.minor < 8):
-        print("❌ Python 3.8 or higher is required")
+        print("Python 3.8 or higher is required")
         return False
     print(f"Python {version.major}.{version.minor}.{version.micro} detected")
     return True
@@ -83,9 +83,9 @@ def setup_environment():
     if not env_file.exists():
         if Path(".env.example").exists():
             run_command("cp .env.example .env", "Creating .env file from template")
-            print("⚠️ Please edit .env file with your API keys")
+            print("Please edit .env with your API keys")
         else:
-            print("❌ .env.example file not found")
+            print(".env.example file not found")
             return False
     else:
         print(".env file already exists")
@@ -109,10 +109,10 @@ def main():
         success = setup_environment()
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
-        print("\n❌ Setup interrupted by user")
+        print("\nSetup interrupted by user")
         sys.exit(1)
     except Exception as unexpected_error:
-        print(f"❌ Unexpected error: {unexpected_error}")
+        print(f"Unexpected error: {unexpected_error}")
         sys.exit(1)
 
 

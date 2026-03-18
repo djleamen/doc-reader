@@ -96,13 +96,13 @@ def run_setup():
     Run first-time setup script.
     Executes setup.py and handles errors gracefully.
     '''
-    print("⚙️ Running first-time setup...")
+    print("Running first-time setup...")
     try:
         # First try without capturing output to see what happens
         result = subprocess.run([sys.executable, "setup.py"], check=True)
         print("Setup completed successfully!")
     except subprocess.CalledProcessError as e:
-        print(f"❌ Setup failed with exit code {e.returncode}")
+        print(f"Setup failed with exit code {e.returncode}")
         # Try again with captured output to get error details
         try:
             result = subprocess.run([sys.executable, "setup.py"], capture_output=True, text=True, check=False)
@@ -114,7 +114,7 @@ def run_setup():
             pass
         sys.exit(1)
     except Exception as e:
-        print(f"❌ Setup failed with unexpected error: {e}")
+        print(f"Setup failed with unexpected error: {e}")
         sys.exit(1)
 
 
@@ -135,18 +135,18 @@ def start_django(host="127.0.0.1", port=8000, with_setup=False):
     try:
         django.setup()
     except Exception as django_error:
-        print(f"❌ Django setup failed: {django_error}")
+        print(f"Django setup failed: {django_error}")
         print("Try running: python main.py setup")
         sys.exit(1)
 
     if with_setup:
-        print("🔧 Running Django migrations and collecting static files...")
+        print("Running Django migrations and collecting static files...")
         try:
             execute_from_command_line([MANAGE_PY, 'makemigrations'])
             execute_from_command_line([MANAGE_PY, 'migrate'])
             execute_from_command_line([MANAGE_PY, 'collectstatic', '--noinput'])
         except Exception as setup_error:
-            print(f"⚠️ Setup warning: {setup_error}")
+            print(f"Setup warning: {setup_error}")
 
     # Start Django development server
     print(f"Starting Django server at http://{host}:{port}")
@@ -156,9 +156,9 @@ def start_django(host="127.0.0.1", port=8000, with_setup=False):
             MANAGE_PY, 'runserver', f'{host}:{port}'
         ])
     except KeyboardInterrupt:
-        print("\n🛑 Server stopped")
+        print("\nServer stopped")
     except Exception as server_error:
-        print(f"❌ Server error: {server_error}")
+        print(f"Server error: {server_error}")
         sys.exit(1)
 
 

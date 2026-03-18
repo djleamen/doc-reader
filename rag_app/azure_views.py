@@ -1,13 +1,11 @@
-"""  
+"""
 Django views and API endpoints for Azure RAG pipeline.
-Uses Azure Document Intelligence for document processing, 
+Uses Azure Document Intelligence for document processing,
 Azure AI Search for retrieval, and Azure OpenAI for answer generation.
 
 Written by DJ Leamen (2025-2026)
 """
 
-import sys
-from pathlib import Path
 from typing import Any, Dict, cast
 
 from django.core.files.base import ContentFile
@@ -23,13 +21,48 @@ from rest_framework.views import APIView
 
 from rag_app.serializers import (DocumentUploadSerializer,
                                  QueryRequestSerializer)
-from src.az_rag_engine import get_azure_rag_engine, ConversationalAzureRAG
-
-sys.path.append(str(Path(__file__).parent.parent / 'src'))
+from src.az_rag_engine import (
+    ConversationalAzureRAG,
+    _azure_rag_engines,
+    get_azure_rag_engine,
+)
 
 
 # Constants
 INTERNAL_ERROR_MESSAGE = 'An internal error occurred.'
+
+
+def _normalize_azure_sources(result) -> tuple[list[dict[str, Any]], list[float]]:
+    """Match the classic API response shape expected by the shared UI."""
+    source_documents = []
+    confidence_scores = []
+
+    for source in result.sources:
+        metadata = dict(source.get('metadata') or {})
+        score = float(source.get('score', metadata.get('score', 0.0)) or 0.0)
+        source_documents.append({
+            'content': source.get('content', ''),
+            'metadata': metadata,
+        })
+        confidence_scores.append(score)
+
+    return source_documents, confidence_scores
+
+
+def _build_azure_metadata(result, retrieval_count: int) -> dict[str, Any]:
+    """Provide stable metadata keys across classic and Azure pipelines."""
+    extra_metadata = result.metadata or {}
+    return {
+        'retrieval_count': retrieval_count,
+        'context_length': 0,
+        'model_used': result.model,
+        'prompt_length': 0,
+        'elapsed_time': result.elapsed_time,
+        'search_method': result.search_method,
+        'cache_hit': result.cache_hit,
+        'pipeline': 'azure',
+        **extra_metadata,
+    }
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AzureDocumentUploadView(APIView):
@@ -67,7 +100,9 @@ class AzureDocumentUploadView(APIView):
             # Get Azure RAG engine
             rag_engine = get_azure_rag_engine(index_name=index_name)
 
-            results = []
+            processed_files = []
+            errors = []
+            total_chunks_added = 0
             for file in files:
                 try:
                     # Save file temporarily
@@ -79,23 +114,30 @@ class AzureDocumentUploadView(APIView):
 
                     # Process document
                     result = rag_engine.add_document(full_path)
-                    results.append(result)
+                    if result.get('status') == 'success':
+                        processed_files.append(file.name)
+                        total_chunks_added += int(
+                            result.get('indexed_count') or result.get('chunks') or 0
+                        )
+                    else:
+                        errors.append(
+                            f"{file.name}: {result.get('error', INTERNAL_ERROR_MESSAGE)}"
+                        )
 
                     # Cleanup
                     default_storage.delete(file_path)
 
                 except Exception as e:
                     logger.error(f"Failed to process file {file.name}: {e}")
-                    results.append({
-                        'status': 'error',
-                        'file': file.name,
-                        'error': 'An internal error occurred while processing this file.'
-                    })
+                    errors.append(
+                        f"{file.name}: An internal error occurred while processing this file."
+                    )
 
             return Response({
-                'status': 'success',
-                'files_processed': len(results),
-                'results': results,
+                'message': f'Processed {len(processed_files)} files successfully',
+                'files_processed': processed_files,
+                'total_chunks_added': total_chunks_added,
+                'errors': errors,
                 'pipeline': 'azure',
             }, status=status.HTTP_200_OK)
 
@@ -156,18 +198,14 @@ class AzureQueryView(APIView):
                 include_sources=include_sources,
             )
 
+            source_documents, confidence_scores = _normalize_azure_sources(result)
+
             return Response({
+                'query': question,
                 'answer': result.answer,
-                'sources': result.sources if include_sources else [],
-                'metadata': {
-                    'query': result.query,
-                    'elapsed_time': result.elapsed_time,
-                    'model': result.model,
-                    'search_method': result.search_method,
-                    'cache_hit': result.cache_hit,
-                    'pipeline': 'azure',
-                    **(result.metadata or {}),
-                }
+                'source_documents': source_documents if include_sources else [],
+                'confidence_scores': confidence_scores if include_sources else [],
+                'metadata': _build_azure_metadata(result, len(source_documents)),
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -234,19 +272,15 @@ class AzureConversationalQueryView(APIView):
                 include_sources=include_sources,
             )
 
+            source_documents, confidence_scores = _normalize_azure_sources(result)
+
             return Response({
+                'query': question,
                 'answer': result.answer,
-                'sources': result.sources if include_sources else [],
+                'source_documents': source_documents if include_sources else [],
+                'confidence_scores': confidence_scores if include_sources else [],
                 'conversation_history': rag_engine.get_history(),
-                'metadata': {
-                    'query': result.query,
-                    'elapsed_time': result.elapsed_time,
-                    'model': result.model,
-                    'search_method': result.search_method,
-                    'cache_hit': result.cache_hit,
-                    'pipeline': 'azure',
-                    **(result.metadata or {}),
-                }
+                'metadata': _build_azure_metadata(result, len(source_documents)),
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -275,7 +309,7 @@ def azure_index_stats(request):
         stats = rag_engine.get_stats()
 
         return JsonResponse({
-            'status': 'success',
+            'index_name': index_name or stats.get('index_name'),
             'stats': stats,
             'pipeline': 'azure',
         })
@@ -288,7 +322,7 @@ def azure_index_stats(request):
         )
 
 
-@api_view(['POST'])
+@api_view(['POST', 'DELETE'])
 def azure_clear_cache(request):
     '''
     Clear the Azure RAG engine cache.
@@ -297,7 +331,7 @@ def azure_clear_cache(request):
     :return: HTTP response with cache clear status
     '''
     try:
-        index_name = request.data.get('index_name')
+        index_name = request.data.get('index_name') or request.query_params.get('index_name')
 
         # Get Azure RAG engine
         rag_engine = get_azure_rag_engine(index_name=index_name)
@@ -319,7 +353,7 @@ def azure_clear_cache(request):
         )
 
 
-@api_view(['POST'])
+@api_view(['POST', 'DELETE'])
 def azure_clear_conversation(request):
     '''
     Clear conversation history.
@@ -328,19 +362,21 @@ def azure_clear_conversation(request):
     :return: HTTP response with conversation clear status
     '''
     try:
-        index_name = request.data.get('index_name')
+        index_name = request.data.get('index_name') or request.query_params.get('index_name')
 
-        # Get conversational Azure RAG engine
-        rag_engine = cast(
-            ConversationalAzureRAG,
-            get_azure_rag_engine(
-                index_name=index_name,
-                conversational=True
+        if index_name:
+            rag_engine = cast(
+                ConversationalAzureRAG,
+                get_azure_rag_engine(
+                    index_name=index_name,
+                    conversational=True
+                )
             )
-        )
-
-        # Clear history
-        rag_engine.clear_history()
+            rag_engine.clear_history()
+        else:
+            for cache_key, rag_engine in _azure_rag_engines.items():
+                if cache_key.endswith(':conv') and isinstance(rag_engine, ConversationalAzureRAG):
+                    rag_engine.clear_history()
 
         return JsonResponse({
             'status': 'success',

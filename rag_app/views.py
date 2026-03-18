@@ -5,10 +5,8 @@ Written by DJ Leamen (2025-2026)
 """
 
 import json
-import sys
 import time
 import logging
-from pathlib import Path
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -25,11 +23,25 @@ from src.config import settings as rag_settings
 
 from .models import Document, DocumentIndex, Query, QuerySession
 
-sys.path.append(str(Path(__file__).parent.parent / 'src'))
-
 # Global RAG engine instances (similar to FastAPI implementation)
 _rag_engines = {}
 _conversational_rags = {}
+logger = logging.getLogger(__name__)
+
+
+def _parse_request_data(request):
+    """Read JSON or form-encoded payloads into a plain dictionary."""
+    if request.body:
+        return json.loads(request.body)
+    return request.POST.dict()
+
+
+def _refresh_index_counts(index):
+    """Keep persisted index counters aligned with processed documents."""
+    processed_documents = Document.objects.filter(index=index, processed=True)
+    index.document_count = processed_documents.count()
+    index.chunk_count = sum(doc.chunk_count or 0 for doc in processed_documents)
+    index.save(update_fields=['document_count', 'chunk_count', 'updated_at'])
 
 
 def get_rag_engine(index_name: str = "default"):
@@ -76,7 +88,6 @@ class IndexView(TemplateView):
         context = super().get_context_data(**kwargs)
         context.update({
             'indexes': DocumentIndex.objects.all(),
-            'recent_documents': Document.objects.filter(processed=True)[:10],
             'supported_formats': ['pdf', 'docx', 'txt', 'md'],
             'max_file_size_mb': 100,
         })
@@ -90,15 +101,6 @@ class HomeView(IndexView):
     Inherits all functionality from IndexView.
     '''
     # Inherits all functionality from IndexView
-
-
-class TestView(TemplateView):
-    '''
-    Simple test view to verify Django is working.
-    
-    Renders a basic test template for debugging purposes.
-    '''
-    template_name = 'simple_test.html'
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -186,12 +188,7 @@ class DocumentUploadView(APIView):
                 except (OSError, IOError, ValueError, RuntimeError) as e:
                     errors.append(f"{file.name}: {str(e)}")
 
-            # Update index statistics
-            index.document_count = Document.objects.filter(
-                index=index, processed=True).count()
-            index.chunk_count = sum(doc.chunk_count or 0 for doc in Document.objects.filter(
-                index=index, processed=True))
-            index.save()
+            _refresh_index_counts(index)
 
             return Response({
                 'message': f'Processed {len(processed_files)} files successfully',
@@ -218,8 +215,7 @@ class QueryView(APIView):
     def post(self, request):
         '''Handle document queries.'''
         try:
-            data = json.loads(
-                request.body) if request.body else request.POST.dict()
+            data = _parse_request_data(request)
 
             question = data.get('question', '').strip()
             if not question:
@@ -314,8 +310,7 @@ class ConversationalQueryView(APIView):
     def post(self, request):
         '''Handle document queries.'''
         try:
-            data = json.loads(
-                request.body) if request.body else request.POST.dict()
+            data = _parse_request_data(request)
 
             question = data.get('question', '').strip()
             if not question:
@@ -370,14 +365,12 @@ class ConversationalQueryView(APIView):
                 })
 
             except (OSError, IOError, ValueError, RuntimeError):
-                logger = logging.getLogger(__name__)
                 logger.error("Conversational query failed", exc_info=True)
                 return Response({
                     'error': 'An internal server error occurred during the conversational query.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         except (OSError, IOError, ValueError, RuntimeError):
-            logger = logging.getLogger(__name__)
             logger.error("Request processing failed", exc_info=True)
             return Response({
                 'error': 'An internal server error occurred while processing the request.'
@@ -433,7 +426,6 @@ def index_stats(request):
         return Response(stats)
 
     except (OSError, IOError, ValueError, RuntimeError):
-        logger = logging.getLogger(__name__)
         logger.error("Failed to get stats", exc_info=True)
         return Response({
             'error': 'An internal server error occurred while retrieving stats.'
@@ -465,7 +457,6 @@ def clear_conversation(request):
         return Response({'message': 'Conversation cleared successfully'})
 
     except (OSError, IOError, ValueError, RuntimeError):
-        logger = logging.getLogger(__name__)
         logger.error("Failed to clear conversation", exc_info=True)
         return Response({
             'error': 'An internal server error occurred.'
@@ -510,7 +501,7 @@ def clear_documents(request):
         # Update index stats
         index.document_count = 0
         index.chunk_count = 0
-        index.save()
+        index.save(update_fields=['document_count', 'chunk_count', 'updated_at'])
 
         logger_instance.info(
             "Cleared all documents from index '%s'", index_name)

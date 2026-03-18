@@ -5,6 +5,8 @@ Written by DJ Leamen (2025-2026)
 """
 
 from rest_framework import serializers
+
+
 class QueryRequestSerializer(serializers.Serializer):
     '''
     Serializer for query requests.
@@ -82,6 +84,11 @@ class QueryResponseSerializer(serializers.Serializer):
         child=DocumentSerializer(),
         required=False
     )
+    confidence_scores = serializers.ListField(
+        child=serializers.FloatField(),
+        required=False
+    )
+    metadata = serializers.DictField()
 
     def create(self, validated_data):
         '''Not implemented - this is a response serializer.'''
@@ -90,8 +97,3 @@ class QueryResponseSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         '''Not implemented - this is a response serializer.'''
         raise NotImplementedError
-    confidence_scores = serializers.ListField(
-        child=serializers.FloatField(),
-        required=False
-    )
-    metadata = serializers.DictField()

@@ -1,235 +1,177 @@
-# RAG Document Q&A System
+# doc-reader
 
-[![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/downloads/)
-[![Django](https://img.shields.io/badge/django-5.0%2B-green)](https://www.djangoproject.com/)
-[![Azure](https://img.shields.io/badge/azure-enabled-0078D4)](https://azure.microsoft.com/)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+A Django-based RAG document Q&A system for large text corpora.
 
-A Django-based document Q&A system using Retrieval-Augmented Generation (RAG) to process and query large documents with AI-powered responses. Features both standard OpenAI integration and **enterprise-ready Azure RAG pipeline**.
+This project lets you upload long documents, index them into chunks, retrieve relevant context with vector search, and generate answers grounded in those retrieved sections. It includes a web UI, REST API, CLI, and an experimental semantic coherence layer that checks whether retrieved context and generated answers stay meaningfully aligned.
 
-## ✨ Features
+## What it does
 
-### Core Features
-- **Django Web Interface**: Modern Bootstrap UI with admin panel
-- **Large Document Support**: Handle documents up to 800k+ words
-- **Multiple Formats**: PDF, DOCX, TXT, and Markdown support
-- **REST API**: Django REST Framework for integrations
-- **Vector Search**: FAISS/ChromaDB/Pinecone vector databases
-- **Conversational Mode**: Context-aware multi-turn conversations
-- **Session Management**: User session tracking and conversation history
-- **CLI Tools**: Command-line interface for batch operations
-- **🎯 Semantic Coherence Validation**: Post-retrieval tracking with automatic fallback behaviors
-  - Monitors semantic consistency across query→chunk→generation pipeline
-  - Automatic k-boosting when coherence drops
-  - Smart output hedging for uncertain answers
-  - Configurable coherence thresholds and fallback strategies
+- Ingests PDF, DOCX, TXT, and Markdown documents
+- Chunks and indexes large documents for retrieval
+- Answers questions over indexed content through:
+  - a Django web interface
+  - REST API endpoints
+  - a CLI
+- Supports conversational querying
+- Tracks semantic coherence across retrieval and generation
+- Includes an experimental Azure-based pipeline alongside the standard local/OpenAI flow
 
-### Azure RAG Pipeline (New! - Experimental)
+## Why this project exists
 
-#### Azure Services Integration
-- **Azure OpenAI**: Embeddings (Ada-002) and Chat Completion (GPT-4)
-- **Azure AI Search**: Vector search with hybrid (vector + keyword) and semantic ranking
-- **Azure Document Intelligence**: Advanced document processing with layout analysis, table extraction, and OCR
-- **Azure Key Vault**: Secure secrets management (optional)
-- **Azure Storage**: Document storage with blob containers (optional)
+This repo was built around a practical long-document retrieval problem: asking useful questions over very large documents, including book-length text. The focus is less on “chat with a PDF” and more on building a system that can handle long inputs, retrieval quality issues, and uncertainty more explicitly.
 
-#### Features
-- **Managed Identity Authentication**: Secure, credential-free authentication for Azure-hosted apps
-- **Automatic Retry Logic**: Exponential backoff for transient failures
-- **Query Result Caching**: In-memory cache with configurable TTL
-- **Hybrid Search**: Combines vector similarity with keyword search for better accuracy
-- **Semantic Ranking**: Azure AI Search semantic ranking for improved relevance
-- **Performance Monitoring**: Built-in metrics and logging
-- **Error Handling**: Comprehensive error handling and recovery
-- **Health Checks**: Validation endpoints for all Azure services
+## Core features
 
-#### Authentication Options
-1. **Managed Identity** (Production - Recommended):
-   - No credentials in code or environment
-   - Automatic credential rotation
-   - Azure RBAC for fine-grained access control
-   
-2. **Service Principal** (CI/CD):
-   - Client ID, Secret, and Tenant ID
-   - Suitable for deployment pipelines
-   
-3. **API Keys** (Development):
-   - Simple setup for local development
-   - Not recommended for production
+### Document ingestion
+- Supports PDF, DOCX, TXT, and Markdown
+- Configurable chunk size and chunk overlap
+- Designed to handle very large documents
 
-## 🚀 Quick Start
+### Query interfaces
+- Django web app
+- REST API
+- Command-line interface
+- Conversational mode for follow-up questions
 
-### Requirements
-- Python 3.8+
-- **For Standard Pipeline**: OpenAI API key
-- **For Azure Pipeline**: Azure subscription with OpenAI, AI Search, and Document Intelligence resources
+### Retrieval
+- FAISS-based vector retrieval
+- Configurable top-k retrieval
+- Optional local embeddings via `sentence-transformers`
+- Optional OpenAI embeddings
 
-### Installation
+### Semantic coherence validation
+After retrieval and answer generation, the system compares embeddings across:
+- query → retrieved chunks
+- retrieved chunks → generated answer
+- query → generated answer
 
-1. **Clone the repository**:
+If coherence drops, the system can:
+- increase retrieval depth
+- hedge the output language
+- flag low-confidence answers
 
+This is intended to make failure modes more visible instead of silently returning overconfident answers.
+
+## Architecture
+
+### Standard pipeline
+1. Upload or add documents
+2. Extract and chunk text
+3. Generate embeddings
+4. Store chunks in a vector index
+5. Retrieve top-k chunks for a question
+6. Generate an answer from retrieved context
+7. Run semantic coherence validation on the result
+
+### Experimental Azure pipeline
+The repo also includes an experimental Azure-native path using:
+- Azure OpenAI
+- Azure AI Search
+- Azure Document Intelligence
+- optional Azure Key Vault / Storage integration
+
+This path is still experimental and should be treated as a separate integration track rather than the default setup.
+
+## Tech stack
+
+- Python
+- Django + Django REST Framework
+- LangChain
+- FAISS
+- OpenAI or local sentence-transformer embeddings
+- Optional Azure OpenAI / AI Search / Document Intelligence
+
+## Quick start
+
+### 1. Clone the repo
 ```bash
 git clone https://github.com/djleamen/doc-reader
 cd doc-reader
 ```
 
-2. **Create virtual environment**:
-
+### 2. Create a virtual environment
 ```bash
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
+# Windows:
+# venv\Scripts\activate
 ```
 
-3. **Install dependencies**:
-
+### 3. Install dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-4. **Set up environment variables**:
-
+### 4. Configure environment variables
 ```bash
 cp .env.example .env
-# Edit .env with your API keys and Azure configuration
+```
+For the standard pipeline, set at least:
+```
+OPENAI_API_KEY=your_key_here
 ```
 
-**For Standard Pipeline (OpenAI)**:
-- Set `OPENAI_API_KEY` in `.env`
+For local embeddings, enable:
+```
+USE_LOCAL_EMBEDDINGS=true
+```
 
-**For Azure Pipeline**:
-- Set Azure service endpoints and credentials
+For the Azure pipeline, fill in the Azure-specific settings from .env.example.
 
-5. **Run setup and start server**:
-
+### 5. Start the app
 ```bash
 python main.py start
 ```
+Then open:
+```
+http://localhost:8000
+```
 
-Open your browser to `http://localhost:8000`
+## Usage
 
-## 📖 Usage
+### Web UI
 
-### Web Interface
-- Upload documents via the web UI
-- Ask questions in natural language
-- View sources and confidence scores
-- Use conversational mode for follow-up questions
+Upload documents and ask questions through the browser.
 
-### REST API
+### API
 ```bash
-# Upload documents
 curl -X POST "http://localhost:8000/api/upload-documents/" \
   -F "files=@document.pdf" \
   -F "index_name=default"
 
-# Query documents
 curl -X POST "http://localhost:8000/api/query/" \
   -H "Content-Type: application/json" \
   -d '{"question": "What is the main topic?", "index_name": "default"}'
 ```
 
-### Command Line
+### CLI
 ```bash
-# Add documents
 python main.py cli add document.pdf
-
-# Query documents
 python main.py cli query "What are the key findings?"
-
-# Interactive mode
 python main.py cli interactive --conversational
 ```
 
-## ⚙️ Configuration
+## Configuration
 
-Key environment variables in `.env`:
-
-```env
-# Required
-OPENAI_API_KEY=your_api_key_here
-
-# Optional
-VECTOR_DB_TYPE=faiss              # faiss, chroma, or pinecone
-CHUNK_SIZE=1000                   # Text chunk size
-CHUNK_OVERLAP=200                 # Overlap between chunks
-TOP_K_RESULTS=5                   # Number of results to retrieve
-CHAT_MODEL=gpt-4-turbo-preview    # OpenAI model to use
-
-# Semantic Coherence Settings
-ENABLE_COHERENCE_VALIDATION=True  # Enable semantic coherence tracking
-COHERENCE_HIGH_THRESHOLD=0.8      # High coherence threshold
-COHERENCE_LOW_THRESHOLD=0.4       # Low coherence threshold
-BOOST_K_MULTIPLIER=2.0            # K boosting multiplier
-```
-
-## 🎯 Semantic Coherence Validation
-
-The system includes advanced semantic coherence tracking that monitors the consistency between queries, retrieved chunks, and generated answers. When coherence drops, automatic fallback behaviors are triggered:
-
-- **K-Boosting**: Automatically increases retrieval count for better context
-- **Output Hedging**: Adds uncertainty language when confidence is low  
-- **Uncertainty Flagging**: Warns users about potentially unreliable answers
-
-## 🏗️ Architecture
+Important settings include:
 
 ```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Django App    │    │   Vector Store   │    │   OpenAI API    │
-│   (Web/API)     │───▶│   (FAISS/etc.)   │───▶│   (GPT-4)       │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Document      │    │   Embeddings     │    │   AI Responses  │
-│   Processing    │    │   & Search       │    │   with Sources  │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
+VECTOR_DB_TYPE=faiss
+CHUNK_SIZE=1000
+CHUNK_OVERLAP=200
+TOP_K_RESULTS=5
+CHAT_MODEL=gpt-4-turbo-preview
+
+ENABLE_COHERENCE_VALIDATION=True
+COHERENCE_HIGH_THRESHOLD=0.8
+COHERENCE_LOW_THRESHOLD=0.4
+BOOST_K_MULTIPLIER=2.0
 ```
 
-### Components
-- **Django App**: Web interface, API, and data management
-- **Document Processor**: Extracts and chunks text from files
-- **Vector Store**: Handles embeddings and similarity search
-- **RAG Engine**: Orchestrates retrieval and generation
-- **CLI Tools**: Command-line utilities
+## Project status
 
-## 🐋 Docker Deployment
+This is a working RAG application with multiple interfaces and an experimental retrieval-quality layer. The standard pipeline is the main path. The Azure pipeline is included as an experimental integration.
 
-```bash
-# Quick start with Docker
-docker-compose up
+## License
 
-# Or build manually
-docker build -t rag-system .
-docker run -p 8000:8000 rag-system
-```
-
-## 🧪 Testing
-
-```bash
-# Run tests
-pytest
-
-# Test with coverage
-pytest --cov=src --cov=rag_app
-```
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
-
-## 🆘 Troubleshooting
-
-**Import errors**: Ensure all dependencies are installed with `pip install -r requirements.txt`
-
-**Memory issues with large docs**: Reduce `CHUNK_SIZE` in `.env` or process documents individually
-
-**Port conflicts**: Use `python main.py start --port 8001` to use a different port
-
-**Poor answer quality**: Increase `TOP_K_RESULTS` and `CHUNK_OVERLAP` for better context retrieval
+MIT

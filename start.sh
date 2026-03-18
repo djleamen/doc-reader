@@ -12,7 +12,7 @@ if [[ -d "venv" ]]; then
 else
     # Check if Python is available
     if ! command -v python3 &> /dev/null; then
-        echo "❌ Python not found. Please install Python 3.8+ and try again."
+        echo "Python not found. Please install Python 3.8+ and try again."
         exit 1
     fi
     PYTHON_CMD="python3"
