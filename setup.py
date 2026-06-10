@@ -5,6 +5,7 @@ Setup script for the RAG Document Q&A system.
 Written by DJ Leamen (2025-2026)
 """
 import os
+import shutil
 import sys
 import subprocess
 from pathlib import Path
@@ -12,20 +13,23 @@ from pathlib import Path
 
 def run_command(command, description):
     '''
-    Run a shell command with error handling.
-    
-    :param command: Command to run
+    Run a command with error handling.
+
+    :param command: Command to run, as a list of arguments
     :param description: Description of the command
     :return: True if command succeeded, False otherwise
     '''
     print(f"{description}...")
     try:
-        subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
+        subprocess.run(command, check=True, capture_output=True, text=True)
         return True
     except subprocess.CalledProcessError as e:
         print(f"Error: {e}")
         print(f"Output: {e.stdout}")
         print(f"Error: {e.stderr}")
+        return False
+    except OSError as e:
+        print(f"Error: {e}")
         return False
 
 
@@ -57,7 +61,7 @@ def setup_environment():
 
     # Create virtual environment if it doesn't exist
     if not Path("venv").exists():
-        if not run_command(f"{sys.executable} -m venv venv", "Creating virtual environment"):
+        if not run_command([sys.executable, "-m", "venv", "venv"], "Creating virtual environment"):
             return False
     else:
         print("Virtual environment already exists")
@@ -69,7 +73,7 @@ def setup_environment():
         pip_cmd = "venv/bin/pip"
 
     # Install requirements
-    if not run_command(f"{pip_cmd} install -r requirements.txt", "Installing dependencies"):
+    if not run_command([pip_cmd, "install", "-r", "requirements.txt"], "Installing dependencies"):
         return False
 
     # Create necessary directories
@@ -82,7 +86,12 @@ def setup_environment():
     env_file = Path(".env")
     if not env_file.exists():
         if Path(".env.example").exists():
-            run_command("cp .env.example .env", "Creating .env file from template")
+            print("Creating .env file from template...")
+            try:
+                shutil.copy(".env.example", ".env")
+            except OSError as copy_error:
+                print(f"Error: {copy_error}")
+                return False
             print("Please edit .env with your API keys")
         else:
             print(".env.example file not found")
