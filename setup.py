@@ -28,6 +28,9 @@ def run_command(command, description):
         print(f"Output: {e.stdout}")
         print(f"Error: {e.stderr}")
         return False
+    except OSError as e:
+        print(f"Error: {e}")
+        return False
 
 
 def check_python_version():
@@ -84,7 +87,11 @@ def setup_environment():
     if not env_file.exists():
         if Path(".env.example").exists():
             print("Creating .env file from template...")
-            shutil.copy(".env.example", ".env")
+            try:
+                shutil.copy(".env.example", ".env")
+            except OSError as copy_error:
+                print(f"Error: {copy_error}")
+                return False
             print("Please edit .env with your API keys")
         else:
             print(".env.example file not found")
