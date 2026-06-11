@@ -28,6 +28,8 @@ _rag_engines = {}
 _conversational_rags = {}
 logger = logging.getLogger(__name__)
 
+FILE_PROCESSING_ERROR_MESSAGE = 'An internal error occurred while processing this file.'
+
 
 def _parse_request_data(request):
     """Read JSON or form-encoded payloads into a plain dictionary."""
@@ -189,9 +191,7 @@ class DocumentUploadView(APIView):
                         logger.error("Failed to process file %s: %s", file.name, e)
                         document.processing_error = str(e)
                         document.save()
-                        errors.append(
-                            f"{file.name}: An internal error occurred while processing this file."
-                        )
+                        errors.append(f"{file.name}: {FILE_PROCESSING_ERROR_MESSAGE}")
 
                     finally:
                         # Clean up temp file
@@ -200,9 +200,7 @@ class DocumentUploadView(APIView):
 
                 except (OSError, IOError, ValueError, RuntimeError) as e:
                     logger.error("Failed to upload file %s: %s", file.name, e)
-                    errors.append(
-                        f"{file.name}: An internal error occurred while processing this file."
-                    )
+                    errors.append(f"{file.name}: {FILE_PROCESSING_ERROR_MESSAGE}")
 
             _refresh_index_counts(index)
 
