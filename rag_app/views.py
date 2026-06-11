@@ -139,7 +139,9 @@ class DocumentUploadView(APIView):
             errors = []
             total_chunks = 0
 
-            rag_engine = get_rag_engine(index_name)
+            # Created lazily so validation-only failures (e.g. unsupported
+            # file types) do not require the RAG engine dependencies.
+            rag_engine = None
 
             supported_formats = rag_settings.supported_formats_list
 
@@ -179,6 +181,8 @@ class DocumentUploadView(APIView):
 
                     try:
                         # Process document
+                        if rag_engine is None:
+                            rag_engine = get_rag_engine(index_name)
                         chunks_added = rag_engine.add_documents([file_path])
                         document.chunk_count = chunks_added or 0
                         document.processed = True
