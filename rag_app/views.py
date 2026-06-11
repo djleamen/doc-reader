@@ -139,12 +139,22 @@ class DocumentUploadView(APIView):
 
             rag_engine = get_rag_engine(index_name)
 
+            supported_formats = rag_settings.supported_formats_list
+
             for file in files:
                 try:
                     # Validate file
                     max_file_size = rag_settings.max_document_size_mb * 1024 * 1024
                     if file.size > max_file_size:
                         errors.append(f"{file.name}: File too large")
+                        continue
+
+                    file_type = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
+                    if file_type not in supported_formats:
+                        errors.append(
+                            f"{file.name}: Unsupported file type "
+                            f"(supported: {', '.join(supported_formats)})"
+                        )
                         continue
 
                     # Save file temporarily
@@ -161,7 +171,7 @@ class DocumentUploadView(APIView):
                         original_filename=file.name,
                         file_path=file_path,
                         file_size=file.size,
-                        file_type=file.name.split('.')[-1].lower(),
+                        file_type=file_type,
                         chunk_count=0
                     )
 
@@ -176,9 +186,12 @@ class DocumentUploadView(APIView):
                         total_chunks += (chunks_added or 0)
 
                     except (OSError, IOError, ValueError, RuntimeError) as e:
+                        logger.error("Failed to process file %s: %s", file.name, e)
                         document.processing_error = str(e)
                         document.save()
-                        errors.append(f"{file.name}: {str(e)}")
+                        errors.append(
+                            f"{file.name}: An internal error occurred while processing this file."
+                        )
 
                     finally:
                         # Clean up temp file
@@ -186,7 +199,10 @@ class DocumentUploadView(APIView):
                             default_storage.delete(temp_path)
 
                 except (OSError, IOError, ValueError, RuntimeError) as e:
-                    errors.append(f"{file.name}: {str(e)}")
+                    logger.error("Failed to upload file %s: %s", file.name, e)
+                    errors.append(
+                        f"{file.name}: An internal error occurred while processing this file."
+                    )
 
             _refresh_index_counts(index)
 
@@ -198,8 +214,9 @@ class DocumentUploadView(APIView):
             })
 
         except (OSError, IOError, ValueError, RuntimeError) as e:
+            logger.error("Upload failed: %s", e, exc_info=True)
             return Response({
-                'error': f'Upload failed: {str(e)}'
+                'error': 'Upload failed due to an internal error'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
