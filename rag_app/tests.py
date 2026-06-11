@@ -266,6 +266,29 @@ class APIViewsTest(TestCase):
         # The test verifies the endpoint exists and handles the request
         self.assertIn(response.status_code, [200, 500])  # 500 if dependencies missing
 
+    def test_upload_unsupported_file_type(self):
+        '''
+        Test document upload with an unsupported file type.
+
+        Verifies unsupported extensions are rejected with a per-file
+        error before any Document records are created.
+        '''
+        test_file = SimpleUploadedFile(
+            "malware.exe",
+            b"MZ fake executable content",
+            content_type="application/octet-stream"
+        )
+        response = self.client.post('/api/upload-documents/', {
+            'files': [test_file],
+            'index_name': 'test_index'
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['files_processed'], [])
+        self.assertEqual(len(data['errors']), 1)
+        self.assertIn('Unsupported file type', data['errors'][0])
+        self.assertEqual(Document.objects.count(), 0)
+
 
 class WebViewsTest(TestCase):
     '''

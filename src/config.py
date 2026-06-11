@@ -77,9 +77,14 @@ class Settings:
         '''
         Get supported formats as a list.
         
-        :return: List of supported file format extensions
+        :return: List of supported file format extensions, normalized to
+                 lowercase without leading dots, with empty entries removed
         '''
-        return [fmt.strip() for fmt in self.supported_formats.split(',')]
+        return [
+            fmt.strip().lstrip('.').lower()
+            for fmt in self.supported_formats.split(',')
+            if fmt.strip().lstrip('.')
+        ]
 
 
 # Global settings instance

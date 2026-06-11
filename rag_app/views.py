@@ -188,7 +188,7 @@ class DocumentUploadView(APIView):
                         total_chunks += (chunks_added or 0)
 
                     except (OSError, IOError, ValueError, RuntimeError) as e:
-                        logger.error("Failed to process file %s: %s", file.name, e)
+                        logger.error("Failed to process file %s: %s", file.name, e, exc_info=True)
                         document.processing_error = str(e)
                         document.save()
                         errors.append(f"{file.name}: {FILE_PROCESSING_ERROR_MESSAGE}")
@@ -199,7 +199,7 @@ class DocumentUploadView(APIView):
                             default_storage.delete(temp_path)
 
                 except (OSError, IOError, ValueError, RuntimeError) as e:
-                    logger.error("Failed to upload file %s: %s", file.name, e)
+                    logger.error("Failed to upload file %s: %s", file.name, e, exc_info=True)
                     errors.append(f"{file.name}: {FILE_PROCESSING_ERROR_MESSAGE}")
 
             _refresh_index_counts(index)
