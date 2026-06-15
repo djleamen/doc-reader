@@ -165,6 +165,44 @@ class QueryModelTest(TestCase):
         self.assertTrue(query.include_scores)
 
 
+class PermissionConfigTest(TestCase):
+    '''
+    Test REST framework permission configuration.
+
+    Verifies that the default permission policy requires authentication
+    and that explicitly public endpoints (health checks) allow unauthenticated
+    access.
+    '''
+
+    def test_default_permission_is_authenticated(self):
+        '''
+        Verify the DRF default permission is IsAuthenticated.
+
+        Ensures AllowAny has not been set as the global default,
+        which would expose all endpoints without authentication.
+        '''
+        from django.conf import settings as django_settings
+        default_perms = django_settings.REST_FRAMEWORK.get('DEFAULT_PERMISSION_CLASSES', [])
+        self.assertIn(
+            'rest_framework.permissions.IsAuthenticated',
+            default_perms,
+        )
+
+    def test_default_permission_is_not_allow_any(self):
+        '''
+        Verify AllowAny is not the global default permission.
+
+        AllowAny as a default would expose every endpoint without
+        authentication, which is a security risk.
+        '''
+        from django.conf import settings as django_settings
+        default_perms = django_settings.REST_FRAMEWORK.get('DEFAULT_PERMISSION_CLASSES', [])
+        self.assertNotIn(
+            'rest_framework.permissions.AllowAny',
+            default_perms,
+        )
+
+
 class APIViewsTest(TestCase):
     '''
     Test the API views.
@@ -177,9 +215,14 @@ class APIViewsTest(TestCase):
         '''
         Set up test fixtures.
         
-        Creates test client and index for API endpoint tests.
+        Creates an authenticated test client and index for API endpoint tests.
         '''
         self.client = Client()
+        self.user = User.objects.create_user(
+            username='apitestuser',
+            password='apitestpass123',
+        )
+        self.client.login(username='apitestuser', password='apitestpass123')
         self.index = DocumentIndex.objects.create(
             name="test_index",
             description="Test index"
@@ -195,6 +238,30 @@ class APIViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'healthy')
+
+    def test_health_check_unauthenticated(self):
+        '''
+        Test that the health check endpoint is publicly accessible.
+
+        The health check endpoint must not require authentication so that
+        load balancers and monitoring tools can reach it freely.
+        '''
+        unauthenticated_client = Client()
+        response = unauthenticated_client.get('/api/health/')
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['status'], 'healthy')
+
+    def test_protected_endpoint_requires_auth(self):
+        '''
+        Test that protected endpoints reject unauthenticated requests.
+
+        Verifies that the index-stats endpoint returns 403 for an
+        unauthenticated client, confirming IsAuthenticated is enforced.
+        '''
+        unauthenticated_client = Client()
+        response = unauthenticated_client.get('/api/index-stats/?index_name=test_index')
+        self.assertEqual(response.status_code, 403)
 
     def test_index_stats(self):
         '''
