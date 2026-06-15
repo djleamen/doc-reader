@@ -20,3 +20,15 @@ updates:
     # Check for updates once a week
     schedule:
       interval: "weekly"
+
+  # Enable version updates for Python dependencies
+  - package-ecosystem: "pip"
+    # Look for requirements files in the root directory
+    directory: "/"
+    # Check the Python ecosystem for updates every day (weekdays)
+    schedule:
+      interval: "daily"
+    groups:
+      langchain:
+        patterns:
+          - "langchain*"
