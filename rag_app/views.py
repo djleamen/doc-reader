@@ -548,10 +548,16 @@ def health_check(request):
     :return: JSON response with service health status
     '''
     # pylint: disable=unused-argument
-    indexes = [index.name for index in DocumentIndex.objects.only('name')]
-
-    return Response({
+    payload = {
         'status': 'healthy',
         'message': 'RAG Document Q&A API is running',
-        'indexes': indexes
-    })
+    }
+
+    # This endpoint is public (AllowAny). Keep the unauthenticated response a
+    # minimal liveness check: only expose index metadata — and only incur the DB
+    # query — for authenticated callers, so probes don't leak internal index names
+    # or add avoidable load on every request.
+    if request.user.is_authenticated:
+        payload['indexes'] = [index.name for index in DocumentIndex.objects.only('name')]
+
+    return Response(payload)

@@ -238,19 +238,24 @@ class APIViewsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'healthy')
+        # Authenticated callers still receive index metadata.
+        self.assertIn('indexes', data)
 
     def test_health_check_unauthenticated(self):
         '''
         Test that the health check endpoint is publicly accessible.
 
         The health check endpoint must not require authentication so that
-        load balancers and monitoring tools can reach it freely.
+        load balancers and monitoring tools can reach it freely, but it must
+        only return a minimal liveness response — no internal index metadata.
         '''
         unauthenticated_client = Client()
         response = unauthenticated_client.get('/api/health/')
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'healthy')
+        # Public probes must not leak internal index names.
+        self.assertNotIn('indexes', data)
 
     def test_protected_endpoint_requires_auth(self):
         '''

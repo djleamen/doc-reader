@@ -402,6 +402,13 @@ def azure_health_check(request):
     :param request: HTTP request object
     :return: HTTP response with health status
     '''
+    # This endpoint is public (AllowAny). Unauthenticated probes get a lightweight
+    # liveness response only: no live dependency validation (which would let anyone
+    # drive external traffic/cost) and no configuration disclosure. The detailed
+    # service/config breakdown is reserved for authenticated callers.
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'healthy', 'pipeline': 'azure'})
+
     try:
         # Get Azure RAG engine
         rag_engine = get_azure_rag_engine()
