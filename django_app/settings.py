@@ -123,10 +123,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
-    # Security: Require authentication for all views by default
-    # Individual views can override this with @api_view decorators or permission_classes
+    # Permission policy. Defaults to AllowAny so local/dev usage works without a
+    # login flow. Set REQUIRE_API_AUTH=True to require an authenticated session
+    # (e.g. via Django admin login) for every endpoint in production.
+    # Individual views can still override this with permission_classes.
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',  # For development
+        'rest_framework.permissions.IsAuthenticated'
+        if os.getenv('REQUIRE_API_AUTH', 'False').lower() == 'true'
+        else 'rest_framework.permissions.AllowAny',
     ],
     # Enable CSRF protection for session authentication
     'DEFAULT_AUTHENTICATION_CLASSES': [
