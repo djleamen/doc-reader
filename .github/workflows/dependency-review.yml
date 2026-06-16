@@ -34,11 +34,6 @@ jobs:
         # Commonly enabled options, see https://github.com/actions/dependency-review-action#configuration-options for all available options.
         with:
           comment-summary-in-pr: always
-          # GHSA-r7w7-9xr2-qq2r (low): image token counting SSRF bypass in
-          # langchain-openai, only patched in 1.1.14+ which requires
-          # langchain-core>=1.2.31 and is unresolvable alongside langchain 0.3.x.
-          # Remove this exception when the langchain 1.x migration lands.
-          allow-ghsas: GHSA-r7w7-9xr2-qq2r
         #   fail-on-severity: moderate
         #   deny-licenses: GPL-1.0-or-later, LGPL-2.0-or-later
         #   retry-on-snapshot-warnings: true
