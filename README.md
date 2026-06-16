@@ -134,6 +134,21 @@ http://localhost:8000
 Upload documents and ask questions through the browser.
 
 ### API
+
+Authentication is required **by default**: every API endpoint (except
+`/api/health/` and `/api/azure/health/`) needs an authenticated session. Log in
+through the Django admin at `/admin/` before making API requests, or use session
+cookies from an active browser session.
+
+The health check endpoints are intentionally public so that load balancers and
+monitoring tools can reach them without credentials. For unauthenticated callers
+they return only a minimal liveness status — index names and Azure
+service/configuration details are exposed only to authenticated requests.
+
+The default (`REQUIRE_API_AUTH=True`) is secure out of the box. For local
+development you can opt out by setting `REQUIRE_API_AUTH=False` in your `.env`
+file. **Never disable authentication in a production deployment.**
+
 ```bash
 curl -X POST "http://localhost:8000/api/upload-documents/" \
   -F "files=@document.pdf" \

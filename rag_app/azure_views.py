@@ -15,7 +15,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from loguru import logger
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -393,6 +394,7 @@ def azure_clear_conversation(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def azure_health_check(request):
     '''
     Health check endpoint for Azure RAG pipeline.
@@ -400,6 +402,13 @@ def azure_health_check(request):
     :param request: HTTP request object
     :return: HTTP response with health status
     '''
+    # This endpoint is public (AllowAny). Unauthenticated probes get a lightweight
+    # liveness response only: no live dependency validation (which would let anyone
+    # drive external traffic/cost) and no configuration disclosure. The detailed
+    # service/config breakdown is reserved for authenticated callers.
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'healthy', 'pipeline': 'azure'})
+
     try:
         # Get Azure RAG engine
         rag_engine = get_azure_rag_engine()

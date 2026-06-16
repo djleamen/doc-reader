@@ -14,7 +14,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.generic import TemplateView
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -538,6 +539,7 @@ def clear_documents(request):
 
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def health_check(request):
     '''
     Health check endpoint.
@@ -546,10 +548,16 @@ def health_check(request):
     :return: JSON response with service health status
     '''
     # pylint: disable=unused-argument
-    indexes = [index.name for index in DocumentIndex.objects.only('name')]
-
-    return Response({
+    payload = {
         'status': 'healthy',
         'message': 'RAG Document Q&A API is running',
-        'indexes': indexes
-    })
+    }
+
+    # This endpoint is public (AllowAny). Keep the unauthenticated response a
+    # minimal liveness check: only expose index metadata — and only incur the DB
+    # query — for authenticated callers, so probes don't leak internal index names
+    # or add avoidable load on every request.
+    if request.user.is_authenticated:
+        payload['indexes'] = [index.name for index in DocumentIndex.objects.only('name')]
+
+    return Response(payload)
