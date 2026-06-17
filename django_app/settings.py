@@ -145,7 +145,16 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:8000",
 ]
 
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+# Allow additional origins to be supplied via environment (comma-separated).
+_extra_cors_origins = os.getenv('CORS_ALLOWED_ORIGINS', '').strip()
+if _extra_cors_origins:
+    CORS_ALLOWED_ORIGINS += [
+        origin.strip() for origin in _extra_cors_origins.split(',') if origin.strip()
+    ]
+
+# Never reflect arbitrary origins by default, even when DEBUG is on. Opt in
+# explicitly with CORS_ALLOW_ALL_ORIGINS=True for throwaway local testing only.
+CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False').lower() == 'true'
 
 # RAG Engine settings (from existing .env)
 RAG_SETTINGS = {
