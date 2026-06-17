@@ -36,7 +36,7 @@ django-cors-headers==4.9.0
 
 # Data handling
 pandas==2.2.2
-numpy>=1.26.0,<2.1.0
+numpy>=2.4.6,<2.5.0
 scikit-learn>=1.9.0,<1.10.0
 tqdm==4.68.2
 
