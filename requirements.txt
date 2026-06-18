@@ -31,7 +31,7 @@ pinecone-client>=6.0.0
 
 # Django web framework and API
 django>=4.2,<5.0
-djangorestframework==3.16.0
+djangorestframework==3.17.1
 django-cors-headers==4.9.0
 
 # Data handling
