@@ -9,28 +9,7 @@
             <div class="section-heading">
                 <h5 class="text-white mb-0"><i class="fas fa-cog"></i> Configuration</h5>
             </div>
-            <p class="panel-caption">Tune retrieval, inspect the active index, and swap pipelines without leaving the workspace.</p>
-            
-            <!-- Pipeline Selection -->
-            <fieldset class="mb-4">
-                <legend class="form-label text-white d-flex align-items-center">
-                    <i class="fas fa-cloud me-2"></i> RAG Pipeline
-                </legend>
-                <div class="btn-group w-100">
-                    <input type="radio" class="btn-check" name="pipelineSelect" id="classicPipeline" value="classic" checked>
-                    <label class="btn btn-outline-light" for="classicPipeline">
-                        <i class="fas fa-server"></i> Classic
-                    </label>
-                    
-                    <input type="radio" class="btn-check" name="pipelineSelect" id="azurePipeline" value="azure">
-                    <label class="btn btn-outline-light" for="azurePipeline">
-                        <i class="fab fa-microsoft"></i> Azure
-                    </label>
-                </div>
-                <small class="text-white-50 mt-1 d-block">
-                    <span id="pipelineBadge" class="badge bg-primary">Classic OpenAI</span>
-                </small>
-            </fieldset>
+            <p class="panel-caption">Tune retrieval and inspect the active index.</p>
             
             <!-- Index Selection -->
             <div class="mb-3">
@@ -42,37 +21,7 @@
                         <option value="default" selected>default</option>
                     {% endfor %}
                 </select>
-                <small class="text-white-50">Select or create document index</small>
-            </div>
-            
-            <!-- Query Settings -->
-            <h6 class="text-white mt-4">Query Settings</h6>
-            
-            <div class="mb-3">
-                <label for="maxResults" class="form-label text-white">Max Results</label>
-                <input type="range" class="form-range" id="maxResults" min="1" max="20" value="5">
-                <small class="text-white-50">Max chunks to retrieve: <span id="maxResultsValue">5</span></small>
-            </div>
-            
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" id="includeSources" checked>
-                <label class="form-check-label text-white" for="includeSources">
-                    Include Sources
-                </label>
-            </div>
-            
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" id="includeScores" checked>
-                <label class="form-check-label text-white" for="includeScores">
-                    Include Confidence Scores
-                </label>
-            </div>
-            
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" id="conversationalMode">
-                <label class="form-check-label text-white" for="conversationalMode">
-                    Conversational Mode
-                </label>
+                <small class="text-white-50">Select document index</small>
             </div>
             
             <!-- Index Statistics -->
@@ -93,9 +42,73 @@
                     <small>Chunks</small>
                 </div>
             </div>
-            
-            <!-- Document Management -->
+
+            <!-- Advanced Settings (collapsed by default) -->
             <div class="mt-4">
+                <button class="btn btn-sm btn-outline-light w-100" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#advancedSettings"
+                        aria-expanded="false">
+                    <i class="fas fa-sliders-h me-1"></i> Advanced Settings
+                    <i class="fas fa-chevron-down ms-1" style="font-size:0.75em"></i>
+                </button>
+                <div class="collapse mt-3" id="advancedSettings">
+
+                    <!-- Pipeline Selection -->
+                    <fieldset class="mb-4">
+                        <legend class="form-label text-white d-flex align-items-center">
+                            <i class="fas fa-cloud me-2"></i> RAG Pipeline
+                        </legend>
+                        <div class="btn-group w-100">
+                            <input type="radio" class="btn-check" name="pipelineSelect" id="classicPipeline" value="classic" checked>
+                            <label class="btn btn-outline-light" for="classicPipeline">
+                                <i class="fas fa-server"></i> Classic
+                            </label>
+                            
+                            <input type="radio" class="btn-check" name="pipelineSelect" id="azurePipeline" value="azure">
+                            <label class="btn btn-outline-light" for="azurePipeline">
+                                <i class="fab fa-microsoft"></i> Azure
+                            </label>
+                        </div>
+                        <small class="text-white-50 mt-1 d-block">
+                            <span id="pipelineBadge" class="badge bg-primary">Classic OpenAI</span>
+                        </small>
+                    </fieldset>
+
+                    <!-- Query Settings -->
+                    <h6 class="text-white">Query Settings</h6>
+                    
+                    <div class="mb-3">
+                        <label for="maxResults" class="form-label text-white">Max Results</label>
+                        <input type="range" class="form-range" id="maxResults" min="1" max="20" value="5">
+                        <small class="text-white-50">Max chunks to retrieve: <span id="maxResultsValue">5</span></small>
+                    </div>
+                    
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="includeSources" checked>
+                        <label class="form-check-label text-white" for="includeSources">
+                            Include Sources
+                        </label>
+                    </div>
+                    
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="includeScores" checked>
+                        <label class="form-check-label text-white" for="includeScores">
+                            Include Confidence Scores
+                        </label>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="conversationalMode">
+                        <label class="form-check-label text-white" for="conversationalMode">
+                            Conversational Mode
+                        </label>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Document Management -->
+            <div class="mt-3">
                 <button class="btn btn-danger btn-sm w-100" id="clearDocuments" title="Clear all documents and chunks from this index">
                     <i class="fas fa-trash-alt"></i> Clear All Documents
                 </button>
@@ -203,10 +216,18 @@
             <!-- Query Form -->
             <form id="queryForm">
                 {% csrf_token %}
+                
+                <!-- Empty state: shown when no docs are indexed -->
+                <div id="emptyState" class="text-center py-3 mb-3 hidden">
+                    <i class="fas fa-inbox fa-2x mb-2" style="color:var(--text-muted)"></i>
+                    <p class="mb-0" style="color:var(--text-muted)">No documents indexed yet — upload files above to get started.</p>
+                </div>
+
                 <div class="mb-3">
                     <label for="questionInput" class="form-label text-white">Your Question:</label>
                     <textarea class="form-control" id="questionInput" rows="3" 
                               placeholder="Ask any question about your uploaded documents..."></textarea>
+                    <small class="text-white-50">Press <kbd style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3)">Ctrl+Enter</kbd> to submit</small>
                 </div>
                 
                 <div class="text-center">
@@ -449,43 +470,45 @@ function clearConversation() {
             'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
         },
         success: function() {
-            alert('Conversation cleared successfully!');
+            showToast('Conversation cleared.', 'success');
         },
         error: function() {
-            alert('Failed to clear conversation');
+            showToast('Failed to clear conversation.', 'error');
         }
     });
 }
 
 function clearAllDocuments(currentIndexName) {
-    if (!confirm(`Warning: this will permanently delete all documents and chunks from the "${currentIndexName}" index.\n\nThis action cannot be undone. Are you sure you want to continue?`)) {
-        return;
-    }
-    
-    $('#clearDocuments').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
-    
-    $.ajax({
-        url: getApiEndpoint('clear-documents'),
-        type: 'DELETE',
-        data: { index_name: currentIndexName },
-        headers: {
-            'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-        },
-        success: function(response) {
-            alert(response.message || 'All documents cleared successfully!');
-            if (typeof loadIndexStats === 'function') {
-                loadIndexStats();
-            }
-            $('#resultsSection').hide();
-        },
-        error: function(xhr) {
-            const errorMsg = xhr.responseJSON?.error || 'Failed to clear documents';
-            alert('Error: ' + errorMsg);
-        },
-        complete: function() {
-            $('#clearDocuments').prop('disabled', false).html('<i class="fas fa-trash-alt"></i> Clear All Documents');
+    showConfirm(
+        'Clear All Documents',
+        `This will permanently delete all documents and chunks from the <strong>${currentIndexName}</strong> index. This cannot be undone.`,
+        function() {
+            $('#clearDocuments').prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Clearing...');
+            
+            $.ajax({
+                url: getApiEndpoint('clear-documents'),
+                type: 'DELETE',
+                data: { index_name: currentIndexName },
+                headers: {
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                },
+                success: function(response) {
+                    showToast(response.message || 'All documents cleared successfully!', 'success');
+                    if (typeof loadIndexStats === 'function') {
+                        loadIndexStats();
+                    }
+                    $('#resultsSection').hide();
+                },
+                error: function(xhr) {
+                    const errorMsg = xhr.responseJSON?.error || 'Failed to clear documents';
+                    showToast('Error: ' + errorMsg, 'error');
+                },
+                complete: function() {
+                    $('#clearDocuments').prop('disabled', false).html('<i class="fas fa-trash-alt"></i> Clear All Documents');
+                }
+            });
         }
-    });
+    );
 }
 
 $(document).ready(function() {
@@ -529,6 +552,14 @@ $(document).ready(function() {
         // Form submissions
         $('#uploadBtn').on('click', uploadDocuments);
         $('#queryForm').on('submit', handleQuery);
+        
+        // Ctrl+Enter / Cmd+Enter submits query
+        $('#questionInput').on('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                e.preventDefault();
+                $('#queryForm').trigger('submit');
+            }
+        });
         
         // Settings
         $('#maxResults').on('input', function() {
@@ -736,8 +767,10 @@ $(document).ready(function() {
             data: { index_name: currentIndexName },
             success: function(response) {
                 if (response.stats) {
+                    const chunks = response.stats.chunk_count || 0;
                     $('#documentCount').text(response.stats.document_count || 0);
-                    $('#chunkCount').text(response.stats.chunk_count || 0);
+                    $('#chunkCount').text(chunks);
+                    $('#emptyState').toggle(chunks === 0);
                 }
             },
             error: function() {

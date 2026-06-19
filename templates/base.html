@@ -336,13 +336,79 @@
 
         .footer {
             background: rgba(45, 54, 112, 0.32);
-            padding: 1.1rem 1.25rem;
+            padding: 0.9rem 1.25rem;
             border-radius: 22px;
             text-align: center;
             margin-top: 1.7rem;
             color: var(--text-secondary);
             border: 1px solid rgba(255, 255, 255, 0.16);
         }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 1.25rem;
+            right: 1.25rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .app-toast {
+            min-width: 280px;
+            max-width: 400px;
+            padding: 0.85rem 1.1rem;
+            border-radius: 16px;
+            color: #fff;
+            font-weight: 600;
+            font-size: 0.94rem;
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            box-shadow: 0 12px 28px rgba(14, 20, 55, 0.3);
+            border: 1px solid rgba(255,255,255,0.18);
+            animation: toastIn 0.22s ease;
+            cursor: pointer;
+        }
+
+        .app-toast.toast-success { background: rgba(40, 130, 100, 0.92); border-left: 4px solid var(--success); }
+        .app-toast.toast-error   { background: rgba(160, 40, 65, 0.92);  border-left: 4px solid var(--danger); }
+        .app-toast.toast-info    { background: rgba(44, 60, 130, 0.92);  border-left: 4px solid var(--accent-strong); }
+        .app-toast.toast-warning { background: rgba(140, 90, 20, 0.92);  border-left: 4px solid var(--accent-warm); }
+
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(30px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+
+        /* Confirmation modal overlay */
+        .confirm-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 15, 50, 0.55);
+            -webkit-backdrop-filter: blur(4px);
+            backdrop-filter: blur(4px);
+            z-index: 1050;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirm-modal-box {
+            background: linear-gradient(160deg, rgba(70, 82, 160, 0.96), rgba(44, 54, 118, 0.97));
+            border: 1px solid var(--glass-border);
+            border-radius: var(--radius-lg);
+            padding: 2rem 2.25rem;
+            max-width: 440px;
+            width: 90%;
+            box-shadow: var(--glass-shadow);
+            color: var(--text-primary);
+        }
+
+        .confirm-modal-box h5 { font-family: 'Sora', sans-serif; font-weight: 700; margin-bottom: 0.75rem; }
+        .confirm-modal-box p  { color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.97rem; }
+        .confirm-modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
 
         .stat-card {
             background: rgba(48, 57, 118, 0.34);
@@ -519,12 +585,11 @@
             
             <!-- Footer -->
             <footer class="footer">
-                <p>
+                <p class="mb-0">
                     <i class="fas fa-robot"></i>
                     <strong>Powered by RAG (Retrieval-Augmented Generation)</strong>
-                    • Built with Django & Bootstrap
+                    &bull; Built with Django &amp; Bootstrap
                 </p>
-                <p>Best results come from direct questions that reuse the wording in your source material. If an answer looks off, open the source chunks and check whether the right phrases were retrieved.</p>
             </footer>
             
         </div>
@@ -535,6 +600,40 @@
     
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+    const TOAST_ICONS = { success: 'fa-check-circle', error: 'fa-exclamation-triangle', info: 'fa-info-circle', warning: 'fa-exclamation-circle' };
+    function showToast(message, type = 'info', duration = 4000) {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `app-toast toast-${type}`;
+        toast.innerHTML = `<i class="fas ${TOAST_ICONS[type] || TOAST_ICONS.info}"></i><span>${message}</span>`;
+        toast.addEventListener('click', () => toast.remove());
+        container.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.3s'; setTimeout(() => toast.remove(), 320); }, duration);
+    }
+
+    function showConfirm(title, message, onConfirm) {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'confirm-modal-backdrop';
+        backdrop.innerHTML = `
+            <div class="confirm-modal-box">
+                <h5><i class="fas fa-exclamation-triangle me-2" style="color:var(--accent-warm)"></i>${title}</h5>
+                <p>${message}</p>
+                <div class="confirm-modal-actions">
+                    <button class="btn btn-outline-light btn-cancel">Cancel</button>
+                    <button class="btn btn-danger btn-ok">Confirm</button>
+                </div>
+            </div>`;
+        backdrop.querySelector('.btn-cancel').addEventListener('click', () => backdrop.remove());
+        backdrop.querySelector('.btn-ok').addEventListener('click', () => { backdrop.remove(); onConfirm(); });
+        backdrop.addEventListener('click', e => { if (e.target === backdrop) backdrop.remove(); });
+        document.body.appendChild(backdrop);
+    }
+    </script>
     
     {% block extra_js %}{% endblock %}
     
