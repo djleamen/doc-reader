@@ -11,8 +11,6 @@ from typing import Any, Dict, cast
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.http import JsonResponse
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
 from loguru import logger
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -65,7 +63,6 @@ def _build_azure_metadata(result, retrieval_count: int) -> dict[str, Any]:
         **extra_metadata,
     }
 
-@method_decorator(csrf_exempt, name='dispatch')
 class AzureDocumentUploadView(APIView):
     """
     API endpoint for uploading documents to Azure RAG pipeline.
@@ -150,7 +147,6 @@ class AzureDocumentUploadView(APIView):
             )
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class AzureQueryView(APIView):
     """
     API endpoint for querying Azure RAG pipeline.
@@ -217,7 +213,6 @@ class AzureQueryView(APIView):
             )
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class AzureConversationalQueryView(APIView):
     """
     API endpoint for conversational queries with Azure RAG pipeline.
