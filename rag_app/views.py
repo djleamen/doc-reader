@@ -10,8 +10,7 @@ import logging
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.views.decorators.csrf import csrf_protect
 from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
@@ -106,7 +105,6 @@ class HomeView(IndexView):
     # Inherits all functionality from IndexView
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class DocumentUploadView(APIView):
     '''
     Handle document uploads via API.
@@ -223,7 +221,6 @@ class DocumentUploadView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class QueryView(APIView):
     '''
     Handle document queries.
@@ -318,7 +315,6 @@ class QueryView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@method_decorator(csrf_exempt, name='dispatch')
 class ConversationalQueryView(APIView):
     '''
     Handle conversational queries.
