@@ -55,6 +55,7 @@ class AzureOpenAIService:
                     azure_endpoint=self.settings.openai_endpoint,
                     api_version=self.settings.openai_api_version,
                     azure_ad_token=token.token,
+                    timeout=self.settings.timeout,
                 )
             elif self.settings.openai_api_key:
                 # Use API Key (for development/testing)
@@ -63,6 +64,7 @@ class AzureOpenAIService:
                     azure_endpoint=self.settings.openai_endpoint,
                     api_key=self.settings.openai_api_key,
                     api_version=self.settings.openai_api_version,
+                    timeout=self.settings.timeout,
                 )
             else:
                 raise ValueError(

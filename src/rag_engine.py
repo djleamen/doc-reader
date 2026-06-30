@@ -70,7 +70,8 @@ class RAGEngine:
         self.llm = ChatOpenAI(
             model=settings.chat_model,
             temperature=settings.temperature,
-            max_tokens=settings.max_tokens
+            max_tokens=settings.max_tokens,
+            timeout=settings.request_timeout
         )
 
         # Create prompt template

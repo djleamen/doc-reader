@@ -42,6 +42,8 @@ class Settings:
         self.chat_model = os.getenv("CHAT_MODEL", "gpt-4-turbo-preview")
         self.max_tokens = int(os.getenv("MAX_TOKENS", "4000"))
         self.temperature = float(os.getenv("TEMPERATURE", "0.1"))
+        # Network timeout (seconds) for outbound LLM/API calls.
+        self.request_timeout = int(os.getenv("REQUEST_TIMEOUT", "30"))
 
         # Vector Database
         self.vector_db_type = os.getenv("VECTOR_DB_TYPE", "faiss")

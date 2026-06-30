@@ -5,6 +5,7 @@ Written by DJ Leamen (2025-2026)
 """
 
 import json
+import os
 import time
 import logging
 
@@ -160,9 +161,11 @@ class DocumentUploadView(APIView):
                         )
                         continue
 
-                    # Save file temporarily
+                    # Save file temporarily. basename guards the storage path
+                    # against traversal via a crafted upload filename.
+                    safe_name = os.path.basename(file.name)
                     temp_path = default_storage.save(
-                        f"temp/{file.name}",
+                        f"temp/{safe_name}",
                         ContentFile(file.read())
                     )
                     file_path = default_storage.path(temp_path)
