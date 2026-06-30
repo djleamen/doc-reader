@@ -6,6 +6,7 @@ Azure AI Search for retrieval, and Azure OpenAI for answer generation.
 Written by DJ Leamen (2025-2026)
 """
 
+import os
 from typing import Any, Dict, cast
 
 from django.core.files.base import ContentFile
@@ -25,6 +26,7 @@ from src.az_rag_engine import (
     _azure_rag_engines,
     get_azure_rag_engine,
 )
+from src.config import settings as rag_settings
 
 
 # Constants
@@ -101,11 +103,28 @@ class AzureDocumentUploadView(APIView):
             processed_files = []
             errors = []
             total_chunks_added = 0
+            supported_formats = rag_settings.supported_formats_list
+            max_file_size = rag_settings.max_document_size_mb * 1024 * 1024
             for file in files:
                 try:
-                    # Save file temporarily
+                    # Validate size and type before reading the file into memory
+                    if file.size > max_file_size:
+                        errors.append(f"{file.name}: File too large")
+                        continue
+
+                    file_type = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
+                    if file_type not in supported_formats:
+                        errors.append(
+                            f"{file.name}: Unsupported file type "
+                            f"(supported: {', '.join(supported_formats)})"
+                        )
+                        continue
+
+                    # Save file temporarily. basename guards the storage path
+                    # against traversal via a crafted upload filename.
+                    safe_name = os.path.basename(file.name)
                     file_path = default_storage.save(
-                        f"temp/azure_{file.name}",
+                        f"temp/azure_{safe_name}",
                         ContentFile(file.read())
                     )
                     full_path = default_storage.path(file_path)
