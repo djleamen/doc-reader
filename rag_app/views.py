@@ -39,6 +39,22 @@ def _parse_request_data(request):
     return request.POST.dict()
 
 
+def _coerce_bool(value, default=True):
+    """Interpret JSON booleans plus common string/number spellings.
+
+    The raw-JSON query path bypasses ``QueryRequestSerializer``'s
+    ``BooleanField`` coercion, so a client sending ``"false"`` would otherwise
+    be treated as truthy (non-empty string). Normalise those here instead.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ('true', '1', 'yes', 'on')
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
+
+
 def _refresh_index_counts(index):
     """Keep persisted index counters aligned with processed documents."""
     processed_documents = Document.objects.filter(index=index, processed=True)
@@ -244,9 +260,25 @@ class QueryView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             index_name = data.get('index_name', 'default')
+
+            # Validate k before it reaches the retriever. This raw-JSON path
+            # bypasses QueryRequestSerializer, so a string, negative, or huge
+            # value would otherwise pass straight through; mirror the
+            # serializer's 1-20 bound (IntegerField(min_value=1, max_value=20)).
             k = data.get('k', rag_settings.top_k_results)
-            include_sources = data.get('include_sources', True)
-            include_scores = data.get('include_scores', True)
+            try:
+                k = int(k)
+            except (TypeError, ValueError):
+                return Response({
+                    'error': 'k must be an integer'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            if not 1 <= k <= 20:
+                return Response({
+                    'error': 'k must be between 1 and 20'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            include_sources = _coerce_bool(data.get('include_sources', True))
+            include_scores = _coerce_bool(data.get('include_scores', True))
 
             # Get index
             try:
