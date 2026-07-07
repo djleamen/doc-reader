@@ -33,6 +33,23 @@ from src.config import settings as rag_settings
 INTERNAL_ERROR_MESSAGE = 'An internal error occurred.'
 
 
+def _coerce_bool(value, default=True):
+    """Interpret JSON booleans plus common string/number spellings.
+
+    ``use_hybrid``/``use_semantic`` are read straight off ``request.data``,
+    bypassing ``QueryRequestSerializer``'s ``BooleanField`` coercion, so a
+    client sending ``"false"`` would otherwise be treated as truthy (non-empty
+    string). Normalise those here instead.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ('true', '1', 'yes', 'on')
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return default
+
+
 def _normalize_azure_sources(result) -> tuple[list[dict[str, Any]], list[float]]:
     """Match the classic API response shape expected by the shared UI."""
     source_documents = []
@@ -129,20 +146,23 @@ class AzureDocumentUploadView(APIView):
                     )
                     full_path = default_storage.path(file_path)
 
-                    # Process document
-                    result = rag_engine.add_document(full_path)
-                    if result.get('status') == 'success':
-                        processed_files.append(file.name)
-                        total_chunks_added += int(
-                            result.get('indexed_count') or result.get('chunks') or 0
-                        )
-                    else:
-                        errors.append(
-                            f"{file.name}: {result.get('error', INTERNAL_ERROR_MESSAGE)}"
-                        )
+                    try:
+                        # Process document
+                        result = rag_engine.add_document(full_path)
+                        if result.get('status') == 'success':
+                            processed_files.append(file.name)
+                            total_chunks_added += int(
+                                result.get('indexed_count') or result.get('chunks') or 0
+                            )
+                        else:
+                            errors.append(
+                                f"{file.name}: {result.get('error', INTERNAL_ERROR_MESSAGE)}"
+                            )
 
-                    # Cleanup
-                    default_storage.delete(file_path)
+                    finally:
+                        # Clean up temp file even if processing raised
+                        if default_storage.exists(file_path):
+                            default_storage.delete(file_path)
 
                 except Exception as e:
                     logger.error(f"Failed to process file {file.name}: {e}")
@@ -199,8 +219,8 @@ class AzureQueryView(APIView):
             index_name = validated_data.get('index_name')
             k = validated_data.get('k', 5)
             include_sources = validated_data.get('include_sources', True)
-            use_hybrid = request.data.get('use_hybrid', True)
-            use_semantic = request.data.get('use_semantic', True)
+            use_hybrid = _coerce_bool(request.data.get('use_hybrid', True))
+            use_semantic = _coerce_bool(request.data.get('use_semantic', True))
 
             # Get Azure RAG engine
             rag_engine = get_azure_rag_engine(index_name=index_name)
@@ -266,8 +286,8 @@ class AzureConversationalQueryView(APIView):
             index_name = validated_data.get('index_name')
             k = validated_data.get('k', 5)
             include_sources = validated_data.get('include_sources', True)
-            use_hybrid = request.data.get('use_hybrid', True)
-            use_semantic = request.data.get('use_semantic', True)
+            use_hybrid = _coerce_bool(request.data.get('use_hybrid', True))
+            use_semantic = _coerce_bool(request.data.get('use_semantic', True))
 
             # Get conversational Azure RAG engine
             rag_engine = cast(
