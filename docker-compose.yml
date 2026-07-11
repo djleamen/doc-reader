@@ -9,7 +9,10 @@ services:
       - PINECONE_ENVIRONMENT=${PINECONE_ENVIRONMENT}
       - VECTOR_DB_TYPE=faiss
       - DJANGO_SETTINGS_MODULE=django_app.settings
-      - DEBUG=True
+      # Default to production-safe DEBUG=False; opt into debug locally with
+      # `DEBUG=True docker compose up`. Hardcoding True here would leak stack
+      # traces and disable settings.py's security hardening for every deploy.
+      - DEBUG=${DEBUG:-False}
     volumes:
       - ./documents:/app/documents
       - ./indexes:/app/indexes
