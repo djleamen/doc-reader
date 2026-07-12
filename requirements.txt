@@ -22,7 +22,7 @@ python-pptx==1.0.2
 python-magic==0.4.27
 
 # Text processing and chunking
-nltk==3.9.4
+nltk==3.10.0
 sentence-transformers==5.6.0
 
 # Vector database alternatives (optional - choose one)
