@@ -38,7 +38,7 @@ django-cors-headers==4.9.0
 pandas==3.0.4
 numpy>=2.5.1,<2.6.0
 scikit-learn>=1.9.0,<1.10.0
-tqdm==4.68.4
+tqdm==4.69.0
 
 # Configuration and logging
 python-dotenv==1.2.2
