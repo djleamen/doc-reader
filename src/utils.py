@@ -16,11 +16,19 @@ import time
 def get_file_hash(file_path: str) -> str:
     '''
     Calculate MD5 hash of a file.
-    
+
+    The hash is used only to detect file changes (cache/dedup keys), never for
+    security, so it is created with ``usedforsecurity=False`` to signal intent
+    to security scanners (e.g. Bandit B324). The kwarg was added in Python 3.9;
+    fall back to the plain constructor on 3.8.
+
     :param file_path: Path to file
     :return: MD5 hash hexadecimal string
     '''
-    hash_md5 = hashlib.md5()
+    try:
+        hash_md5 = hashlib.md5(usedforsecurity=False)
+    except TypeError:  # Python < 3.9 does not support usedforsecurity
+        hash_md5 = hashlib.md5()
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(4096), b""):
             hash_md5.update(chunk)
