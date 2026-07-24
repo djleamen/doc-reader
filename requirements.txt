@@ -23,7 +23,7 @@ python-magic==0.4.27
 
 # Text processing and chunking
 nltk==3.10.0
-sentence-transformers==5.6.0
+sentence-transformers==5.6.1
 
 # Vector database alternatives (optional - choose one)
 # chromadb==0.5.0
