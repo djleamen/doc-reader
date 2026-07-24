@@ -335,7 +335,7 @@ class QueryView(APIView):
 
                 return Response(response_data)
 
-            except (OSError, IOError, ValueError, RuntimeError):
+            except (OSError, ValueError, RuntimeError):
                 logger.error("Query failed", exc_info=True)
                 return Response({
                     'error': 'An internal server error occurred while processing the query.'
@@ -345,7 +345,7 @@ class QueryView(APIView):
             return Response({
                 'error': 'Invalid JSON in request body'
             }, status=status.HTTP_400_BAD_REQUEST)
-        except (OSError, IOError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError):
             logger.error("Request processing failed", exc_info=True)
             return Response({
                 'error': 'An internal server error occurred while processing the request.'
