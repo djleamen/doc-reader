@@ -335,20 +335,20 @@ class QueryView(APIView):
 
                 return Response(response_data)
 
-            except (OSError, ValueError, RuntimeError):
-                logger.error("Query failed", exc_info=True)
+            except (OSError, IOError, ValueError, RuntimeError) as e:
+                logger.error("Query execution failed: %s", e, exc_info=True)
                 return Response({
-                    'error': 'An internal server error occurred while processing the query.'
+                    'error': 'An internal server error occurred while running the query.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         except json.JSONDecodeError:
             return Response({
                 'error': 'Invalid JSON in request body'
             }, status=status.HTTP_400_BAD_REQUEST)
-        except (OSError, ValueError, RuntimeError):
-            logger.error("Request processing failed", exc_info=True)
+        except (OSError, IOError, ValueError, RuntimeError) as e:
+            logger.error("Query request handling failed: %s", e, exc_info=True)
             return Response({
-                'error': 'An internal server error occurred while processing the request.'
+                'error': 'An internal server error occurred while handling the query request.'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
