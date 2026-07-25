@@ -209,7 +209,7 @@ class DocumentUploadView(APIView):
                         processed_files.append(file.name)
                         total_chunks += (chunks_added or 0)
 
-                    except (OSError, IOError, ValueError, RuntimeError) as e:
+                    except (OSError, ValueError, RuntimeError) as e:
                         logger.error("Failed to process file %s: %s", file.name, e, exc_info=True)
                         document.processing_error = str(e)
                         document.save()
@@ -220,7 +220,7 @@ class DocumentUploadView(APIView):
                         if default_storage.exists(temp_path):
                             default_storage.delete(temp_path)
 
-                except (OSError, IOError, ValueError, RuntimeError) as e:
+                except (OSError, ValueError, RuntimeError) as e:
                     logger.error("Failed to upload file %s: %s", file.name, e, exc_info=True)
                     errors.append(f"{file.name}: {FILE_PROCESSING_ERROR_MESSAGE}")
 
@@ -233,7 +233,7 @@ class DocumentUploadView(APIView):
                 'errors': errors
             })
 
-        except (OSError, IOError, ValueError, RuntimeError) as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error("Upload failed: %s", e, exc_info=True)
             return Response({
                 'error': 'Upload failed due to an internal error'
@@ -335,18 +335,20 @@ class QueryView(APIView):
 
                 return Response(response_data)
 
-            except (OSError, IOError, ValueError, RuntimeError) as e:
+            except (OSError, ValueError, RuntimeError) as e:
+                logger.error("Query execution failed: %s", e, exc_info=True)
                 return Response({
-                    'error': f'Query failed: {str(e)}'
+                    'error': 'An internal server error occurred while running the query.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         except json.JSONDecodeError:
             return Response({
                 'error': 'Invalid JSON in request body'
             }, status=status.HTTP_400_BAD_REQUEST)
-        except (OSError, IOError, ValueError, RuntimeError) as e:
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.error("Query request handling failed: %s", e, exc_info=True)
             return Response({
-                'error': f'Request failed: {str(e)}'
+                'error': 'An internal server error occurred while handling the query request.'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -415,13 +417,13 @@ class ConversationalQueryView(APIView):
                     'session_id': str(query_session.id)
                 })
 
-            except (OSError, IOError, ValueError, RuntimeError):
+            except (OSError, ValueError, RuntimeError):
                 logger.error("Conversational query failed", exc_info=True)
                 return Response({
                     'error': 'An internal server error occurred during the conversational query.'
                 }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        except (OSError, IOError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError):
             logger.error("Request processing failed", exc_info=True)
             return Response({
                 'error': 'An internal server error occurred while processing the request.'
@@ -476,7 +478,7 @@ def index_stats(request):
 
         return Response(stats)
 
-    except (OSError, IOError, ValueError, RuntimeError):
+    except (OSError, ValueError, RuntimeError):
         logger.error("Failed to get stats", exc_info=True)
         return Response({
             'error': 'An internal server error occurred while retrieving stats.'
@@ -507,7 +509,7 @@ def clear_conversation(request):
 
         return Response({'message': 'Conversation cleared successfully'})
 
-    except (OSError, IOError, ValueError, RuntimeError):
+    except (OSError, ValueError, RuntimeError):
         logger.error("Failed to clear conversation", exc_info=True)
         return Response({
             'error': 'An internal server error occurred.'
@@ -562,7 +564,7 @@ def clear_documents(request):
             'index_name': index_name
         })
 
-    except (OSError, IOError, ValueError, RuntimeError):
+    except (OSError, ValueError, RuntimeError):
         logger_instance.error("Failed to clear documents", exc_info=True)
         return Response({
             'error': 'Failed to clear documents due to a server error.'
