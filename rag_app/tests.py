@@ -318,6 +318,33 @@ class APIViewsTest(TestCase):
                                   content_type='application/json')
         self.assertEqual(response.status_code, 404)
 
+    def test_query_malformed_json(self):
+        '''
+        Test query endpoint with a malformed JSON body.
+
+        Verifies a client-side JSON error yields 400, not 500.
+        '''
+        response = self.client.post('/api/query/',
+                                  '{"question": "unterminated',
+                                  content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn('error', data)
+
+    def test_conversational_query_malformed_json(self):
+        '''
+        Test conversational query endpoint with a malformed JSON body.
+
+        Mirrors the /api/query/ handling so a broken JSON body returns 400
+        instead of falling through to a 500 internal error.
+        '''
+        response = self.client.post('/api/conversational-query/',
+                                  '{"question": "unterminated',
+                                  content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn('error', data)
+
     def test_upload_document_api(self):
         '''
         Test document upload API endpoint.
