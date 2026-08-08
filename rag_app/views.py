@@ -35,7 +35,18 @@ FILE_PROCESSING_ERROR_MESSAGE = 'An internal error occurred while processing thi
 def _parse_request_data(request):
     """Read JSON or form-encoded payloads into a plain dictionary."""
     if request.body:
-        return json.loads(request.body)
+        data = json.loads(request.body)
+        # A syntactically valid but non-object body (list, string, number)
+        # would otherwise reach ``data.get(...)`` in the callers and raise an
+        # uncaught AttributeError (HTTP 500). Reject it as a malformed request
+        # so it lands on the existing JSONDecodeError -> 400 handler instead.
+        if not isinstance(data, dict):
+            raise json.JSONDecodeError(
+                'Request body must be a JSON object',
+                request.body.decode('utf-8', 'replace'),
+                0,
+            )
+        return data
     return request.POST.dict()
 
 
