@@ -345,6 +345,35 @@ class APIViewsTest(TestCase):
         data = response.json()
         self.assertIn('error', data)
 
+    def test_query_non_object_json_body(self):
+        '''
+        Test query endpoint with a valid-JSON, non-object body.
+
+        A body such as a JSON array or string decodes cleanly but is not a
+        dict; it must return 400 rather than falling through to an uncaught
+        AttributeError (500) when the view reads ``.get('question')``.
+        '''
+        response = self.client.post('/api/query/',
+                                  json.dumps([1, 2, 3]),
+                                  content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn('error', data)
+
+    def test_conversational_query_non_object_json_body(self):
+        '''
+        Test conversational query endpoint with a non-object JSON body.
+
+        Mirrors the /api/query/ handling so a non-dict JSON body returns 400
+        instead of falling through to a 500 internal error.
+        '''
+        response = self.client.post('/api/conversational-query/',
+                                  json.dumps("just a string"),
+                                  content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn('error', data)
+
     def test_upload_document_api(self):
         '''
         Test document upload API endpoint.
