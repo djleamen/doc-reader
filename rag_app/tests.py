@@ -374,10 +374,36 @@ class APIViewsTest(TestCase):
         data = response.json()
         self.assertIn('error', data)
 
+    def test_clear_conversation_clears_in_memory_history(self):
+        '''
+        Test that clearing a conversation resets in-memory RAG history.
+
+        Regression test: the endpoint previously guarded on a non-existent
+        clear_memory() method, so the process-global ConversationalRAG history
+        was never actually cleared and old context leaked into later turns.
+        '''
+        from rag_app import views
+
+        class _StubConversationalRAG:
+            def __init__(self):
+                self.conversation_history = [{'q': 'hi', 'a': 'there'}]
+
+            def clear_conversation(self):
+                self.conversation_history = []
+
+        stub = _StubConversationalRAG()
+        views._conversational_rags['test_index'] = stub
+        try:
+            response = self.client.delete('/api/conversation/')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(stub.conversation_history, [])
+        finally:
+            views._conversational_rags.pop('test_index', None)
+
     def test_upload_document_api(self):
         '''
         Test document upload API endpoint.
-        
+
         Verifies upload endpoint accepts files and returns appropriate
         response. May return 500 if RAG dependencies are unavailable.
         '''
