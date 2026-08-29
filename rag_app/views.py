@@ -8,6 +8,7 @@ import json
 import os
 import time
 import logging
+from collections import OrderedDict
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -26,7 +27,13 @@ from .models import Document, DocumentIndex, Query, QuerySession
 
 # Global RAG engine instances (similar to FastAPI implementation)
 _rag_engines = {}
-_conversational_rags = {}
+# Conversational engines are keyed by ``(session_key, index_name)`` so each
+# browser session keeps its own conversation history. Keying by index alone
+# let every session that queried the same index share one process-global
+# history, leaking prior turns between users. Bounded with an LRU cap so the
+# cache cannot grow without limit as sessions accumulate over the process life.
+_conversational_rags = OrderedDict()
+_MAX_CONVERSATIONAL_RAGS = 128
 logger = logging.getLogger(__name__)
 
 FILE_PROCESSING_ERROR_MESSAGE = 'An internal error occurred while processing this file.'
@@ -86,17 +93,31 @@ def get_rag_engine(index_name: str = "default"):
     return _rag_engines[index_name]
 
 
-def get_conversational_rag(index_name: str = "default"):
+def get_conversational_rag(index_name: str = "default", session_key: str = None):
     '''
-    Get or create conversational RAG engine instance for given index.
-    
+    Get or create conversational RAG engine instance for a session and index.
+
+    Keying by ``session_key`` keeps each user's conversation history isolated
+    instead of sharing one process-global history per index. A missing
+    ``session_key`` falls back to a shared key so non-session callers keep
+    working.
+
     :param index_name: Name of the document index
-    :return: ConversationalRAG instance for the specified index
+    :param session_key: Session identifier isolating conversation history
+    :return: ConversationalRAG instance for the specified session and index
     '''
-    if index_name not in _conversational_rags:
-        _conversational_rags[index_name] = ConversationalRAG(
+    cache_key = (session_key, index_name)
+    if cache_key not in _conversational_rags:
+        # Evict the least-recently-used engine once the cap is reached so the
+        # cache cannot grow without bound as sessions accumulate.
+        while len(_conversational_rags) >= _MAX_CONVERSATIONAL_RAGS:
+            _conversational_rags.popitem(last=False)
+        _conversational_rags[cache_key] = ConversationalRAG(
             index_name=index_name)
-    return _conversational_rags[index_name]
+    else:
+        # Mark as most-recently-used for the LRU eviction order.
+        _conversational_rags.move_to_end(cache_key)
+    return _conversational_rags[cache_key]
 
 
 class IndexView(TemplateView):
@@ -403,7 +424,7 @@ class ConversationalQueryView(APIView):
 
             # Perform conversational query
             start_time = time.time()
-            conversational_rag = get_conversational_rag(index_name)
+            conversational_rag = get_conversational_rag(index_name, session_key)
 
             try:
                 result = conversational_rag.conversational_query(question)
@@ -560,8 +581,10 @@ def clear_documents(request):
         # Clear RAG engine cache
         if index_name in _rag_engines:
             del _rag_engines[index_name]
-        if index_name in _conversational_rags:
-            del _conversational_rags[index_name]
+        # Conversational engines are keyed by (session_key, index_name); drop
+        # every session's engine for this index, not just a single entry.
+        for cache_key in [k for k in _conversational_rags if k[1] == index_name]:
+            del _conversational_rags[cache_key]
 
         # Delete all documents from database
         Document.objects.filter(index=index).delete()
