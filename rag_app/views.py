@@ -9,6 +9,7 @@ import os
 import time
 import logging
 from collections import OrderedDict
+from typing import Optional
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -93,7 +94,7 @@ def get_rag_engine(index_name: str = "default"):
     return _rag_engines[index_name]
 
 
-def get_conversational_rag(index_name: str = "default", session_key: str = None):
+def get_conversational_rag(index_name: str = "default", session_key: Optional[str] = None):
     '''
     Get or create conversational RAG engine instance for a session and index.
 
