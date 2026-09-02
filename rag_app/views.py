@@ -536,8 +536,13 @@ def clear_conversation(request):
         if not session_key:
             return Response({'message': 'No active session found'})
 
-        # Clear conversational RAG memory
-        for conv_rag in _conversational_rags.values():
+        # Clear conversational RAG memory for THIS session only. Engines are
+        # keyed by (session_key, index_name); iterating every cached value
+        # would wipe other sessions' in-memory history — the cross-session
+        # leak tracked in #177. Mirror the per-index scoping in
+        # clear_documents by filtering on the session component of the key.
+        for cache_key in [k for k in _conversational_rags if k[0] == session_key]:
+            conv_rag = _conversational_rags[cache_key]
             if hasattr(conv_rag, 'clear_conversation'):
                 conv_rag.clear_conversation()
 
