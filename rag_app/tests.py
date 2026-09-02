@@ -431,7 +431,7 @@ class WebViewsTest(TestCase):
     def test_home_view(self):
         '''
         Test the home page loads.
-        
+
         Verifies home page returns 200 status and contains
         expected page title.
         '''
@@ -440,3 +440,71 @@ class WebViewsTest(TestCase):
         self.assertContains(response, 'RAG Document Q&A System')
         self.assertContains(response, 'Upload Documents')
         self.assertContains(response, 'Ask Questions')
+
+
+class ConversationalRAGCacheTest(TestCase):
+    '''
+    Test session-scoped caching of conversational RAG engines.
+
+    Verifies that conversation history is isolated per browser session
+    rather than shared process-wide per index, and that the cache is
+    bounded by an LRU eviction cap.
+    '''
+
+    def setUp(self):
+        '''
+        Set up test fixtures.
+
+        Swaps ConversationalRAG for a lightweight stub so the cache logic
+        can be exercised without the heavy RAG/LLM dependencies, and starts
+        from an empty cache.
+        '''
+        from rag_app import views
+
+        self.views = views
+        self._real_engine = views.ConversationalRAG
+
+        class _StubEngine:
+            def __init__(self, index_name="default"):
+                self.index_name = index_name
+
+        views.ConversationalRAG = _StubEngine
+        views._conversational_rags.clear()
+
+    def tearDown(self):
+        '''Restore the real engine and empty the cache after each test.'''
+        self.views.ConversationalRAG = self._real_engine
+        self.views._conversational_rags.clear()
+
+    def test_sessions_get_isolated_engines(self):
+        '''
+        Two sessions querying the same index get distinct engines.
+
+        Keying by (session_key, index_name) prevents one user's conversation
+        history from leaking into another's, while a repeated (session, index)
+        lookup returns the cached instance.
+        '''
+        engine_a = self.views.get_conversational_rag('shared_index', 'session-a')
+        engine_b = self.views.get_conversational_rag('shared_index', 'session-b')
+        self.assertIsNot(engine_a, engine_b)
+        self.assertIs(
+            engine_a,
+            self.views.get_conversational_rag('shared_index', 'session-a'),
+        )
+
+    def test_cache_is_bounded_by_lru_cap(self):
+        '''
+        The cache never exceeds the configured maximum size.
+
+        Creating more engines than the cap evicts the least-recently-used
+        entries while keeping the most recent.
+        '''
+        cap = self.views._MAX_CONVERSATIONAL_RAGS
+        for i in range(cap + 5):
+            self.views.get_conversational_rag('idx', f'session-{i}')
+        self.assertLessEqual(len(self.views._conversational_rags), cap)
+        self.assertNotIn(('session-0', 'idx'), self.views._conversational_rags)
+        self.assertIn(
+            (f'session-{cap + 4}', 'idx'),
+            self.views._conversational_rags,
+        )
