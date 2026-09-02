@@ -538,8 +538,8 @@ def clear_conversation(request):
 
         # Clear conversational RAG memory
         for conv_rag in _conversational_rags.values():
-            if hasattr(conv_rag, 'clear_memory'):
-                conv_rag.clear_memory()
+            if hasattr(conv_rag, 'clear_conversation'):
+                conv_rag.clear_conversation()
 
         # Delete session queries
         QuerySession.objects.filter(session_key=session_key).delete()
