@@ -127,6 +127,9 @@ def get_conversational_rag(index_name: str = "default", session_key: Optional[st
     with _conversational_rags_lock:
         existing = _conversational_rags.get(cache_key)
         if existing is not None:
+            # A concurrent request already cached this engine; keep it at the
+            # MRU end (as the fast path does) so it isn't evicted early.
+            _conversational_rags.move_to_end(cache_key)
             return existing
         # Evict the least-recently-used engine once the cap is reached so the
         # cache cannot grow without bound as sessions accumulate.
