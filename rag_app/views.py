@@ -542,8 +542,12 @@ def clear_conversation(request):
         # leak tracked in #177. Mirror the per-index scoping in
         # clear_documents by filtering on the session component of the key.
         for cache_key in [k for k in _conversational_rags if k[0] == session_key]:
-            conv_rag = _conversational_rags[cache_key]
-            if hasattr(conv_rag, 'clear_conversation'):
+            # Look up via .get(): the cache is a process-global mutated by
+            # other requests (LRU eviction, clear_documents), so an entry may
+            # be gone between snapshotting the keys and this lookup. A direct
+            # subscript would raise an uncaught KeyError (500) in that race.
+            conv_rag = _conversational_rags.get(cache_key)
+            if conv_rag is not None and hasattr(conv_rag, 'clear_conversation'):
                 conv_rag.clear_conversation()
 
         # Delete session queries
