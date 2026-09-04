@@ -14,6 +14,7 @@ from typing import Optional
 
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views.decorators.csrf import csrf_protect
 from django.views.generic import TemplateView
 from rest_framework import status
@@ -139,7 +140,7 @@ def get_conversational_rag(index_name: str = "default", session_key: Optional[st
         return engine
 
 
-class IndexView(TemplateView):
+class IndexView(LoginRequiredMixin, TemplateView):
     '''
     Main web interface view.
     
@@ -434,7 +435,8 @@ class ConversationalQueryView(APIView):
                 index = DocumentIndex.objects.get(name=index_name)
                 query_session, _ = QuerySession.objects.get_or_create(
                     session_key=session_key,
-                    index=index
+                    index=index,
+                    user=request.user,
                 )
             except DocumentIndex.DoesNotExist:
                 return Response({
