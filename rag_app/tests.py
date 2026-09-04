@@ -12,6 +12,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
+from rest_framework.permissions import AllowAny
 
 from rag_app.models import Document, DocumentIndex, Query, QuerySession
 
@@ -569,6 +570,63 @@ class AuthenticatedConversationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         query_session = QuerySession.objects.get(id=response.json()['session_id'])
         self.assertEqual(query_session.user, self.user)
+
+    @patch('rag_app.views.get_conversational_rag')
+    def test_existing_anonymous_session_is_linked_without_duplication(
+            self, get_engine):
+        session = self.client.session
+        session.save()
+        existing_session = QuerySession.objects.create(
+            session_key=session.session_key,
+            index=self.index,
+        )
+        get_engine.return_value.conversational_query.return_value = SimpleNamespace(
+            answer='An answer',
+            metadata={},
+        )
+
+        response = self.client.post(
+            '/api/conversational-query/',
+            json.dumps({
+                'question': 'A question',
+                'index_name': self.index.name,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(QuerySession.objects.count(), 1)
+        existing_session.refresh_from_db()
+        self.assertEqual(existing_session.user, self.user)
+
+
+class AnonymousConversationTest(TestCase):
+    """Verify the documented local-development authentication opt-out."""
+
+    @patch('rag_app.views.get_conversational_rag')
+    def test_anonymous_conversation_keeps_nullable_user(self, get_engine):
+        from rag_app.views import ConversationalQueryView
+
+        index = DocumentIndex.objects.create(name='anonymous_index')
+        get_engine.return_value.conversational_query.return_value = SimpleNamespace(
+            answer='An answer',
+            metadata={},
+        )
+
+        with patch.object(
+                ConversationalQueryView, 'permission_classes', [AllowAny]):
+            response = self.client.post(
+                '/api/conversational-query/',
+                json.dumps({
+                    'question': 'A question',
+                    'index_name': index.name,
+                }),
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        query_session = QuerySession.objects.get(id=response.json()['session_id'])
+        self.assertIsNone(query_session.user)
 
 
 class ConversationalRAGCacheTest(TestCase):

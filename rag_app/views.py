@@ -436,8 +436,15 @@ class ConversationalQueryView(APIView):
                 query_session, _ = QuerySession.objects.get_or_create(
                     session_key=session_key,
                     index=index,
-                    user=request.user,
+                    defaults={
+                        'user': request.user
+                        if request.user.is_authenticated
+                        else None,
+                    },
                 )
+                if request.user.is_authenticated and query_session.user_id is None:
+                    query_session.user = request.user
+                    query_session.save(update_fields=['user', 'updated_at'])
             except DocumentIndex.DoesNotExist:
                 return Response({
                     'error': f'Index "{index_name}" not found'
