@@ -146,6 +146,19 @@
             place-items: center;
         }
 
+        .account-bar {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .account-bar form {
+            margin: 0;
+        }
+
         .main-header-title {
             display: inline-flex;
             align-items: center;
@@ -561,6 +574,17 @@
 <body>
     <div class="container-fluid">
         <div class="main-container">
+            {% if user.is_authenticated %}
+                <div class="account-bar">
+                    <span><i class="fas fa-user-circle"></i> {{ user.get_username }}</span>
+                    <form method="post" action="{% url 'logout' %}">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-light" type="submit">
+                            <i class="fas fa-sign-out-alt"></i> Sign out
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
             
             <!-- Header -->
             <header class="main-header">

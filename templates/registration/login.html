@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign in | RAG Document Q&A System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8 col-lg-5">
+        <div class="glass-card">
+            <div class="section-heading">
+                <h5 class="text-white mb-0">
+                    <i class="fas fa-lock"></i> Sign in
+                </h5>
+            </div>
+            <p class="panel-caption">
+                Use your account to access documents and keep conversation history tied to your session.
+            </p>
+
+            {% if form.errors %}
+                <div class="alert alert-error" role="alert">
+                    Your username or password was not recognized.
+                </div>
+            {% endif %}
+
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ next }}">
+
+                <div class="mb-3">
+                    <label class="form-label" for="{{ form.username.id_for_label }}">Username</label>
+                    <input
+                        class="form-control"
+                        id="{{ form.username.id_for_label }}"
+                        name="{{ form.username.html_name }}"
+                        type="text"
+                        value="{{ form.username.value|default:'' }}"
+                        autocomplete="username"
+                        autofocus
+                        required
+                    >
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label" for="{{ form.password.id_for_label }}">Password</label>
+                    <input
+                        class="form-control"
+                        id="{{ form.password.id_for_label }}"
+                        name="{{ form.password.html_name }}"
+                        type="password"
+                        autocomplete="current-password"
+                        required
+                    >
+                </div>
+
+                <button class="btn btn-primary w-100" type="submit">
+                    <i class="fas fa-sign-in-alt"></i> Sign in
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

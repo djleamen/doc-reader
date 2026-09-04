@@ -131,14 +131,21 @@ http://localhost:8000
 
 ### Web UI
 
-Upload documents and ask questions through the browser.
+Sign in at `/login/`, then upload documents and ask questions through the
+browser. Django authentication protects the workspace, Django sessions isolate
+multi-turn conversation memory, and persisted query sessions are associated
+with the signed-in user. Create the first account with:
+
+```bash
+python manage.py createsuperuser
+```
 
 ### API
 
 Authentication is required **by default**: every API endpoint (except
 `/api/health/` and `/api/azure/health/`) needs an authenticated session. Log in
-through the Django admin at `/admin/` before making API requests, or use session
-cookies from an active browser session.
+at `/login/` before making API requests, or use session cookies from an active
+browser session.
 
 The health check endpoints are intentionally public so that load balancers and
 monitoring tools can reach them without credentials. For unauthenticated callers

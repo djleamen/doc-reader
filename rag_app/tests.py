@@ -6,10 +6,13 @@ Written by DJ Leamen (2025-2026)
 
 import json
 import uuid
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
+from rest_framework.permissions import AllowAny
 
 from rag_app.models import Document, DocumentIndex, Query, QuerySession
 
@@ -497,6 +500,19 @@ class WebViewsTest(TestCase):
 
     def setUp(self):
         self.client = Client()
+        self.user = User.objects.create_user(
+            username='webtestuser',
+            password='webtestpass123',
+        )
+
+    def test_home_view_requires_login(self):
+        response = self.client.get('/')
+        self.assertRedirects(response, '/login/?next=/')
+
+    def test_login_page_loads(self):
+        response = self.client.get('/login/')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Sign in')
 
     def test_home_view(self):
         '''
@@ -505,11 +521,112 @@ class WebViewsTest(TestCase):
         Verifies home page returns 200 status and contains
         expected page title.
         '''
+        self.client.login(username='webtestuser', password='webtestpass123')
         response = self.client.get('/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'RAG Document Q&A System')
         self.assertContains(response, 'Upload Documents')
         self.assertContains(response, 'Ask Questions')
+        self.assertContains(response, 'webtestuser')
+
+    def test_logout_ends_authenticated_session(self):
+        self.client.login(username='webtestuser', password='webtestpass123')
+        response = self.client.post('/logout/')
+        self.assertRedirects(response, '/login/')
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+
+class AuthenticatedConversationTest(TestCase):
+    """Verify persisted conversation history belongs to the signed-in user."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='conversationuser',
+            password='conversationpass123',
+        )
+        self.client.login(
+            username='conversationuser',
+            password='conversationpass123',
+        )
+        self.index = DocumentIndex.objects.create(name='conversation_index')
+
+    @patch('rag_app.views.get_conversational_rag')
+    def test_conversation_session_is_linked_to_user(self, get_engine):
+        get_engine.return_value.conversational_query.return_value = SimpleNamespace(
+            answer='An answer',
+            metadata={},
+        )
+
+        response = self.client.post(
+            '/api/conversational-query/',
+            json.dumps({
+                'question': 'A question',
+                'index_name': self.index.name,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        query_session = QuerySession.objects.get(id=response.json()['session_id'])
+        self.assertEqual(query_session.user, self.user)
+
+    @patch('rag_app.views.get_conversational_rag')
+    def test_existing_anonymous_session_is_linked_without_duplication(
+            self, get_engine):
+        session = self.client.session
+        session.save()
+        existing_session = QuerySession.objects.create(
+            session_key=session.session_key,
+            index=self.index,
+        )
+        get_engine.return_value.conversational_query.return_value = SimpleNamespace(
+            answer='An answer',
+            metadata={},
+        )
+
+        response = self.client.post(
+            '/api/conversational-query/',
+            json.dumps({
+                'question': 'A question',
+                'index_name': self.index.name,
+            }),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(QuerySession.objects.count(), 1)
+        existing_session.refresh_from_db()
+        self.assertEqual(existing_session.user, self.user)
+
+
+class AnonymousConversationTest(TestCase):
+    """Verify the documented local-development authentication opt-out."""
+
+    @patch('rag_app.views.get_conversational_rag')
+    def test_anonymous_conversation_keeps_nullable_user(self, get_engine):
+        from rag_app.views import ConversationalQueryView
+
+        index = DocumentIndex.objects.create(name='anonymous_index')
+        get_engine.return_value.conversational_query.return_value = SimpleNamespace(
+            answer='An answer',
+            metadata={},
+        )
+
+        with patch.object(
+                ConversationalQueryView, 'permission_classes', [AllowAny]):
+            response = self.client.post(
+                '/api/conversational-query/',
+                json.dumps({
+                    'question': 'A question',
+                    'index_name': index.name,
+                }),
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        query_session = QuerySession.objects.get(id=response.json()['session_id'])
+        self.assertIsNone(query_session.user)
 
 
 class ConversationalRAGCacheTest(TestCase):
