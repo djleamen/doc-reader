@@ -42,7 +42,7 @@ tqdm==4.70.0
 
 # Configuration and logging
 python-dotenv==1.2.3
-pydantic>=2.13.4,<3.0
+pydantic>=2.13.5,<3.0
 pydantic-settings>=2.15.0,<3.0.0
 loguru==0.7.3
 
