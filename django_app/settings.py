@@ -167,7 +167,7 @@ RAG_SETTINGS = {
     'PINECONE_API_KEY': os.getenv('PINECONE_API_KEY'),
     'PINECONE_ENVIRONMENT': os.getenv('PINECONE_ENVIRONMENT'),
     'EMBEDDING_MODEL': os.getenv('EMBEDDING_MODEL', 'text-embedding-ada-002'),
-    'CHAT_MODEL': os.getenv('CHAT_MODEL', 'gpt-4-turbo-preview'),
+    'CHAT_MODEL': os.getenv('CHAT_MODEL', 'gpt-4o'),
     'MAX_TOKENS': int(os.getenv('MAX_TOKENS', '4000')),
     'TEMPERATURE': float(os.getenv('TEMPERATURE', '0.1')),
     'VECTOR_DB_TYPE': os.getenv('VECTOR_DB_TYPE', 'faiss'),

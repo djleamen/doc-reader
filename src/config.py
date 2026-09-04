@@ -39,7 +39,7 @@ class Settings:
 
         # Model Configuration
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
-        self.chat_model = os.getenv("CHAT_MODEL", "gpt-4-turbo-preview")
+        self.chat_model = os.getenv("CHAT_MODEL", "gpt-4o")
         self.max_tokens = int(os.getenv("MAX_TOKENS", "4000"))
         self.temperature = float(os.getenv("TEMPERATURE", "0.1"))
         # Network timeout (seconds) for outbound LLM/API calls.
