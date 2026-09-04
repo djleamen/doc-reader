@@ -391,14 +391,58 @@ class APIViewsTest(TestCase):
             def clear_conversation(self):
                 self.conversation_history = []
 
+        # Engines are keyed by (session_key, index_name); give the client a
+        # real session so the DELETE request resolves to this stub's key.
+        session = self.client.session
+        session.save()
+        session_key = session.session_key
+
         stub = _StubConversationalRAG()
-        views._conversational_rags['test_index'] = stub
+        cache_key = (session_key, 'test_index')
+        views._conversational_rags[cache_key] = stub
         try:
             response = self.client.delete('/api/conversation/')
             self.assertEqual(response.status_code, 200)
             self.assertEqual(stub.conversation_history, [])
         finally:
-            views._conversational_rags.pop('test_index', None)
+            views._conversational_rags.pop(cache_key, None)
+
+    def test_clear_conversation_is_scoped_to_requesting_session(self):
+        '''
+        Test that clearing one session's conversation leaves others intact.
+
+        Regression test for #177: clear_conversation previously iterated every
+        cached engine, so one session's "clear" wiped in-memory history for all
+        other sessions (and indexes). It must only clear the requester's own
+        session-scoped engines.
+        '''
+        from rag_app import views
+
+        class _StubConversationalRAG:
+            def __init__(self):
+                self.conversation_history = [{'q': 'hi', 'a': 'there'}]
+
+            def clear_conversation(self):
+                self.conversation_history = []
+
+        # The requesting session (owns the client's cookie) plus a second,
+        # unrelated session whose history must survive the clear.
+        session = self.client.session
+        session.save()
+        my_key = session.session_key
+
+        mine = _StubConversationalRAG()
+        other = _StubConversationalRAG()
+        views._conversational_rags[(my_key, 'default')] = mine
+        views._conversational_rags[('other-session', 'default')] = other
+        try:
+            response = self.client.delete('/api/conversation/')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(mine.conversation_history, [])
+            self.assertEqual(other.conversation_history, [{'q': 'hi', 'a': 'there'}])
+        finally:
+            views._conversational_rags.pop((my_key, 'default'), None)
+            views._conversational_rags.pop(('other-session', 'default'), None)
 
     def test_upload_document_api(self):
         '''

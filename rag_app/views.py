@@ -6,6 +6,7 @@ Written by DJ Leamen (2025-2026)
 
 import json
 import os
+import threading
 import time
 import logging
 from collections import OrderedDict
@@ -34,6 +35,10 @@ _rag_engines = {}
 # history, leaking prior turns between users. Bounded with an LRU cap so the
 # cache cannot grow without limit as sessions accumulate over the process life.
 _conversational_rags = OrderedDict()
+# Guards every read/mutation of ``_conversational_rags``. The cache is shared
+# across request threads, so iterating it (to snapshot or evict) while another
+# thread inserts/pops would raise "dictionary changed size during iteration".
+_conversational_rags_lock = threading.Lock()
 _MAX_CONVERSATIONAL_RAGS = 128
 logger = logging.getLogger(__name__)
 
@@ -108,17 +113,30 @@ def get_conversational_rag(index_name: str = "default", session_key: Optional[st
     :return: ConversationalRAG instance for the specified session and index
     '''
     cache_key = (session_key, index_name)
-    if cache_key not in _conversational_rags:
+    with _conversational_rags_lock:
+        engine = _conversational_rags.get(cache_key)
+        if engine is not None:
+            # Mark as most-recently-used for the LRU eviction order.
+            _conversational_rags.move_to_end(cache_key)
+            return engine
+
+    # Build outside the lock so a slow engine init doesn't serialise every
+    # other cache access, then insert with a double-check in case a concurrent
+    # request created the same (session, index) engine meanwhile.
+    engine = ConversationalRAG(index_name=index_name)
+    with _conversational_rags_lock:
+        existing = _conversational_rags.get(cache_key)
+        if existing is not None:
+            # A concurrent request already cached this engine; keep it at the
+            # MRU end (as the fast path does) so it isn't evicted early.
+            _conversational_rags.move_to_end(cache_key)
+            return existing
         # Evict the least-recently-used engine once the cap is reached so the
         # cache cannot grow without bound as sessions accumulate.
         while len(_conversational_rags) >= _MAX_CONVERSATIONAL_RAGS:
             _conversational_rags.popitem(last=False)
-        _conversational_rags[cache_key] = ConversationalRAG(
-            index_name=index_name)
-    else:
-        # Mark as most-recently-used for the LRU eviction order.
-        _conversational_rags.move_to_end(cache_key)
-    return _conversational_rags[cache_key]
+        _conversational_rags[cache_key] = engine
+        return engine
 
 
 class IndexView(TemplateView):
@@ -536,8 +554,19 @@ def clear_conversation(request):
         if not session_key:
             return Response({'message': 'No active session found'})
 
-        # Clear conversational RAG memory
-        for conv_rag in _conversational_rags.values():
+        # Clear conversational RAG memory for THIS session only. Engines are
+        # keyed by (session_key, index_name); clearing every cached engine
+        # would wipe other sessions' in-memory history — the cross-session
+        # leak tracked in #177. Snapshot this session's engines under the
+        # shared lock so a concurrent mutation (LRU eviction / clear_documents)
+        # can't change the cache size mid-iteration, then clear outside the
+        # lock (clear_conversation only touches the engine's own state).
+        with _conversational_rags_lock:
+            session_engines = [
+                engine for key, engine in _conversational_rags.items()
+                if key[0] == session_key
+            ]
+        for conv_rag in session_engines:
             if hasattr(conv_rag, 'clear_conversation'):
                 conv_rag.clear_conversation()
 
@@ -584,8 +613,11 @@ def clear_documents(request):
             del _rag_engines[index_name]
         # Conversational engines are keyed by (session_key, index_name); drop
         # every session's engine for this index, not just a single entry.
-        for cache_key in [k for k in _conversational_rags if k[1] == index_name]:
-            del _conversational_rags[cache_key]
+        # Snapshot and delete under the shared lock so a concurrent get/clear
+        # can't change the cache size mid-iteration.
+        with _conversational_rags_lock:
+            for cache_key in [k for k in _conversational_rags if k[1] == index_name]:
+                del _conversational_rags[cache_key]
 
         # Delete all documents from database
         Document.objects.filter(index=index).delete()
