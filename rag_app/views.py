@@ -19,6 +19,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.generic import TemplateView
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -53,7 +54,16 @@ def _parse_request_data(request):
     consumed by DRF/CSRF handling, so touching ``request.body`` here raises
     ``RawPostDataException``.
     """
-    data = request.data
+    try:
+        data = request.data
+    except ParseError as exc:
+        # DRF's JSONParser raises ParseError for a malformed body, and DRF's
+        # own handler would turn that into {"detail": ...} before the callers'
+        # JSONDecodeError branch runs — so the endpoint answered malformed
+        # JSON with a different error envelope than every other error it
+        # returns. Re-raise as the error the callers already handle.
+        raise json.JSONDecodeError(
+            'Invalid JSON in request body', str(exc), 0) from exc
     if hasattr(data, 'dict'):  # form-encoded QueryDict
         return data.dict()
     # A syntactically valid but non-object body (list, string, number)
@@ -262,7 +272,13 @@ class DocumentUploadView(APIView):
                         processed_files.append(file.name)
                         total_chunks += (chunks_added or 0)
 
-                    except (OSError, ValueError, RuntimeError) as e:
+                    # Document processing runs third-party code (langchain,
+                    # the embeddings client, faiss), which raises its own
+                    # exception types — an auth error or a transport error is
+                    # neither OSError, ValueError nor RuntimeError. Catching
+                    # narrowly let those escape as an unhandled 500 and lose
+                    # the per-file error the endpoint is built to report.
+                    except Exception as e:  # pylint: disable=broad-except
                         logger.error("Failed to process file %s: %s", file.name, e, exc_info=True)
                         document.processing_error = str(e)
                         document.save()
@@ -273,7 +289,9 @@ class DocumentUploadView(APIView):
                         if default_storage.exists(temp_path):
                             default_storage.delete(temp_path)
 
-                except (OSError, ValueError, RuntimeError) as e:
+                except Exception as e:  # pylint: disable=broad-except
+                    # Same rationale as above: one unreadable file must not
+                    # abort the whole batch.
                     logger.error("Failed to upload file %s: %s", file.name, e, exc_info=True)
                     errors.append(f"{file.name}: {FILE_PROCESSING_ERROR_MESSAGE}")
 

@@ -108,7 +108,13 @@ cp .env.example .env
 ```
 For the standard pipeline, set at least:
 ```
+DJANGO_SECRET_KEY=<a generated secret>
 OPENAI_API_KEY=your_key_here
+```
+`DJANGO_SECRET_KEY` has no default — the app raises at startup without it.
+Generate one with:
+```bash
+python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
 ```
 
 For local embeddings, enable:
