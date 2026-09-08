@@ -531,10 +531,21 @@ def get_azure_rag_engine(index_name: Optional[str] = None, conversational: bool 
 
     with _azure_rag_engines_lock:
         engine = _azure_rag_engines.get(cache_key)
-        if engine is None:
-            if conversational:
-                engine = ConversationalAzureRAG(index_name=index_name)
-            else:
-                engine = AzureRAGEngine(index_name=index_name)
-            _azure_rag_engines[cache_key] = engine
+        if engine is not None:
+            return engine
+
+    # Build outside the lock so a slow engine init (OpenAI client, search
+    # vector store, document processor) doesn't serialise every other cache
+    # access, then insert with a double-check in case a concurrent request
+    # created the same engine meanwhile.
+    engine = (
+        ConversationalAzureRAG(index_name=index_name)
+        if conversational
+        else AzureRAGEngine(index_name=index_name)
+    )
+    with _azure_rag_engines_lock:
+        existing = _azure_rag_engines.get(cache_key)
+        if existing is not None:
+            return existing
+        _azure_rag_engines[cache_key] = engine
         return engine
