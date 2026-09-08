@@ -89,7 +89,9 @@ class AzureOpenAIService:
         :return: Result from successful function execution
         :rtype: Any
         '''
-        max_retries = self.settings.max_retries
+        # Always attempt at least once, even if max_retries is misconfigured to
+        # 0 or a negative value, so the function never falls through to None.
+        max_retries = max(1, self.settings.max_retries)
 
         for attempt in range(max_retries):
             try:
@@ -101,6 +103,11 @@ class AzureOpenAIService:
             except Exception as e:
                 logger.error(f"Unexpected error: {e}")
                 raise
+
+        # Defensive: the retry handlers re-raise on the final attempt, so this
+        # is only reached if the loop somehow exhausts without returning.
+        raise RuntimeError(
+            f"Azure OpenAI call failed after {max_retries} retry attempt(s)")
 
     def _handle_rate_limit_error(self, error: RateLimitError, 
                                  attempt: int, max_retries: int) -> None:
