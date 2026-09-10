@@ -24,6 +24,7 @@ from rag_app.serializers import (DocumentUploadSerializer,
 from src.az_rag_engine import (
     ConversationalAzureRAG,
     _azure_rag_engines,
+    _azure_rag_engines_lock,
     get_azure_rag_engine,
 )
 from src.config import settings as rag_settings
@@ -409,7 +410,11 @@ def azure_clear_conversation(request):
             )
             rag_engine.clear_history()
         else:
-            for cache_key, rag_engine in _azure_rag_engines.items():
+            # Snapshot under the lock so a concurrent engine creation can't
+            # raise "dictionary changed size during iteration".
+            with _azure_rag_engines_lock:
+                engines = list(_azure_rag_engines.items())
+            for cache_key, rag_engine in engines:
                 if cache_key.endswith(':conv') and isinstance(rag_engine, ConversationalAzureRAG):
                     rag_engine.clear_history()
 

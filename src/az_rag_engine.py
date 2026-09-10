@@ -7,6 +7,7 @@ Written by DJ Leamen (2025-2026)
 
 import time
 import hashlib
+import threading
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -507,12 +508,17 @@ class ConversationalAzureRAG(AzureRAGEngine):
 
 # Global RAG engine instances
 _azure_rag_engines: Dict[str, AzureRAGEngine] = {}
+# Guards every read/mutation of ``_azure_rag_engines``. The cache is shared
+# across request threads, so an unsynchronised check-then-insert can build the
+# same engine twice, and iterating it (see ``azure_clear_conversation``) while
+# another thread inserts would raise "dictionary changed size during iteration".
+_azure_rag_engines_lock = threading.Lock()
 
 
 def get_azure_rag_engine(index_name: Optional[str] = None, conversational: bool = False) -> AzureRAGEngine:
     '''
     Get or create a cached Azure RAG engine instance.
-    
+
     :param index_name: Name of the search index to use
     :type index_name: Optional[str]
     :param conversational: Whether to use conversational RAG with history
@@ -523,12 +529,23 @@ def get_azure_rag_engine(index_name: Optional[str] = None, conversational: bool 
     index_name = index_name or azure_settings.search_index_name
     cache_key = f"{index_name}:{'conv' if conversational else 'std'}"
 
-    if cache_key not in _azure_rag_engines:
-        if conversational:
-            _azure_rag_engines[cache_key] = ConversationalAzureRAG(
-                index_name=index_name)
-        else:
-            _azure_rag_engines[cache_key] = AzureRAGEngine(
-                index_name=index_name)
+    with _azure_rag_engines_lock:
+        engine = _azure_rag_engines.get(cache_key)
+        if engine is not None:
+            return engine
 
-    return _azure_rag_engines[cache_key]
+    # Build outside the lock so a slow engine init (OpenAI client, search
+    # vector store, document processor) doesn't serialise every other cache
+    # access, then insert with a double-check in case a concurrent request
+    # created the same engine meanwhile.
+    engine = (
+        ConversationalAzureRAG(index_name=index_name)
+        if conversational
+        else AzureRAGEngine(index_name=index_name)
+    )
+    with _azure_rag_engines_lock:
+        existing = _azure_rag_engines.get(cache_key)
+        if existing is not None:
+            return existing
+        _azure_rag_engines[cache_key] = engine
+        return engine
