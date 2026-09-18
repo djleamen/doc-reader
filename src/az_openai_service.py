@@ -11,6 +11,7 @@ from openai import AzureOpenAI
 from openai.types.chat import ChatCompletionMessageParam
 from openai import RateLimitError, APIError
 from azure.core.exceptions import AzureError
+from azure.identity import get_bearer_token_provider
 from loguru import logger
 
 from src.az_config import azure_settings
@@ -47,14 +48,18 @@ class AzureOpenAIService:
                 # Use Managed Identity (recommended for production)
                 logger.info("Initializing Azure OpenAI with Managed Identity")
                 credential = self.settings.get_credential()
-                # Get token for Azure OpenAI
-                token = credential.get_token(
-                    "https://cognitiveservices.azure.com/.default")
+                # Use a token provider rather than a single statically-fetched
+                # token. This service is a process-lifetime singleton, so a
+                # static azure_ad_token would expire (~60-90 min) and make every
+                # subsequent call fail with 401 until the process restarts. The
+                # provider lets the SDK refresh the AAD token automatically.
+                token_provider = get_bearer_token_provider(
+                    credential, "https://cognitiveservices.azure.com/.default")
 
                 self.client = AzureOpenAI(
                     azure_endpoint=self.settings.openai_endpoint,
                     api_version=self.settings.openai_api_version,
-                    azure_ad_token=token.token,
+                    azure_ad_token_provider=token_provider,
                     timeout=self.settings.timeout,
                 )
             elif self.settings.openai_api_key:
