@@ -850,8 +850,12 @@ class ConversationalRAG(RAGEngine):
         recent_history = self.conversation_history[-3:]  # Last 3 exchanges
         for i, exchange in enumerate(recent_history, 1):
             context_parts.append(f"Q{i}: {exchange['question']}")
-            # Truncate long answers
-            context_parts.append(f"A{i}: {exchange['answer'][:200]}...")
+            # Truncate long answers, only appending the ellipsis when the
+            # answer was actually cut off (avoids a misleading "..." on short
+            # answers being fed to the model as context).
+            answer = exchange['answer']
+            truncated_answer = f"{answer[:200]}..." if len(answer) > 200 else answer
+            context_parts.append(f"A{i}: {truncated_answer}")
 
         context_parts.append(f"\nCurrent question: {question}")
 
