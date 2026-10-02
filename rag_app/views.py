@@ -59,23 +59,39 @@ _MAX_QUESTION_LENGTH = 5000
 _MAX_INDEX_NAME_LENGTH = 255
 
 
-def _validate_query_fields(question, index_name):
-    """Bound ``question``/``index_name`` on the raw-JSON query path.
+def _read_query_params(data):
+    """Extract and validate ``question``/``index_name`` from a raw-JSON body.
 
-    Returns a 400 ``Response`` when a field is out of bounds, or ``None`` when
-    both are acceptable.
+    Shared by the classic query endpoints so their validation stays identical.
+    Returns ``(question, index_name, error)`` where ``error`` is a 400
+    ``Response`` for a missing/invalid field (or ``None`` when both are
+    acceptable). A non-string ``question`` is rejected before ``.strip()`` so a
+    JSON null/number/list/object yields 400 rather than an AttributeError (500).
     """
+    question = data.get('question', '')
+    if not isinstance(question, str):
+        return None, None, Response(
+            {'error': 'question must be a string'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    question = question.strip()
+    if not question:
+        return None, None, Response(
+            {'error': 'Question is required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     if len(question) > _MAX_QUESTION_LENGTH:
-        return Response(
+        return None, None, Response(
             {'error': f'question must be at most {_MAX_QUESTION_LENGTH} characters'},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    index_name = data.get('index_name', 'default')
     if not isinstance(index_name, str) or len(index_name) > _MAX_INDEX_NAME_LENGTH:
-        return Response(
+        return None, None, Response(
             {'error': f'index_name must be a string of at most {_MAX_INDEX_NAME_LENGTH} characters'},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    return None
+    return question, index_name, None
 
 
 def _parse_request_data(request):
@@ -369,23 +385,7 @@ class QueryView(APIView):
         try:
             data = _parse_request_data(request)
 
-            question = data.get('question', '')
-            # Reject a non-string question before .strip(): a JSON null, number,
-            # list, or object would otherwise raise AttributeError (HTTP 500)
-            # instead of the intended 400.
-            if not isinstance(question, str):
-                return Response({
-                    'error': 'question must be a string'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            question = question.strip()
-            if not question:
-                return Response({
-                    'error': 'Question is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            index_name = data.get('index_name', 'default')
-
-            error = _validate_query_fields(question, index_name)
+            question, index_name, error = _read_query_params(data)
             if error is not None:
                 return error
 
@@ -493,23 +493,7 @@ class ConversationalQueryView(APIView):
         try:
             data = _parse_request_data(request)
 
-            question = data.get('question', '')
-            # Reject a non-string question before .strip(): a JSON null, number,
-            # list, or object would otherwise raise AttributeError (HTTP 500)
-            # instead of the intended 400.
-            if not isinstance(question, str):
-                return Response({
-                    'error': 'question must be a string'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            question = question.strip()
-            if not question:
-                return Response({
-                    'error': 'Question is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            index_name = data.get('index_name', 'default')
-
-            error = _validate_query_fields(question, index_name)
+            question, index_name, error = _read_query_params(data)
             if error is not None:
                 return error
 
