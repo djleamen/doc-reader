@@ -113,6 +113,9 @@ def test_validate_openai_api_key():
     assert validate_openai_api_key("sk-" + "a" * 30) is True
     assert validate_openai_api_key("sk-short") is False
     assert validate_openai_api_key("nope-" + "a" * 30) is False
+    # A missing/None or non-string key must return False, not raise.
+    assert validate_openai_api_key(None) is False
+    assert validate_openai_api_key(12345) is False
 
 
 def test_chunk_list():

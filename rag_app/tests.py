@@ -5,6 +5,8 @@ Written by DJ Leamen (2025-2026)
 """
 
 import json
+import threading
+import time
 import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -489,6 +491,110 @@ class APIViewsTest(TestCase):
         self.assertEqual(len(data['errors']), 1)
         self.assertIn('Unsupported file type', data['errors'][0])
         self.assertEqual(Document.objects.count(), 0)
+
+    def _assert_status(self, url, payload, expected):
+        '''POST a JSON body to a query endpoint and assert the status code.'''
+        resp = self.client.post(url, json.dumps(payload), content_type='application/json')
+        self.assertEqual(resp.status_code, expected, msg=payload)
+        return resp
+
+    def test_query_input_validation_returns_400(self):
+        '''
+        Test the classic query endpoints reject malformed/oversized fields.
+
+        Covers the raw-JSON bounds that mirror the serializers: the 5001
+        question length, the 256 index_name length, and non-string question /
+        index_name values across both query endpoints. All return 400 (a
+        non-string question must not raise AttributeError -> 500).
+        '''
+        q, c = '/api/query/', '/api/conversational-query/'
+        self._assert_status(q, {'question': 'a' * 5001, 'index_name': 'test_index'}, 400)
+        self._assert_status(q, {'question': 7, 'index_name': 'test_index'}, 400)
+        self._assert_status(q, {'question': 'hi', 'index_name': 'i' * 256}, 400)
+        self._assert_status(q, {'question': 'hi', 'index_name': 7}, 400)
+        self._assert_status(c, {'question': 7, 'index_name': 'test_index'}, 400)
+        self._assert_status(c, {'question': 'hi', 'index_name': 7}, 400)
+
+    def test_query_accepts_boundary_field_lengths(self):
+        '''
+        Test boundary-length question/index_name pass validation.
+
+        A 5000-char question and a 255-char index_name are within bounds;
+        aiming at a missing index isolates each to a 404 (not 400), confirming
+        the value was accepted without invoking the engine.
+        '''
+        self._assert_status('/api/query/', {'question': 'a' * 5000, 'index_name': 'missing'}, 404)
+        self._assert_status('/api/query/', {'question': 'hi', 'index_name': 'i' * 255}, 404)
+
+    def test_upload_rejects_oversized_index_name(self):
+        '''
+        Test the upload endpoint rejects an over-length index_name.
+
+        The classic upload path reads index_name straight from POST; it is
+        capped at 255 chars to match DocumentUploadSerializer.
+        '''
+        upload = SimpleUploadedFile('t.txt', b'x', content_type='text/plain')
+        resp = self.client.post(
+            '/api/upload-documents/', {'files': [upload], 'index_name': 'i' * 256})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_get_rag_engine_constructs_once_under_concurrency(self):
+        '''
+        Concurrent cache misses build exactly one engine.
+
+        get_rag_engine constructs under _rag_engines_lock, so parallel callers
+        that all miss the same index share a single RAGEngine instance rather
+        than each building their own.
+        '''
+        from rag_app import views
+
+        built = []
+
+        class _StubEngine:
+            def __init__(self, index_name):
+                time.sleep(0.02)  # widen the window for thread overlap
+                built.append(index_name)
+
+        with patch.object(views, 'RAGEngine', _StubEngine):
+            views._rag_engines.pop('concurrent_idx', None)
+            engines = []
+
+            def worker():
+                engines.append(views.get_rag_engine('concurrent_idx'))
+
+            threads = [threading.Thread(target=worker) for _ in range(5)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            views._rag_engines.pop('concurrent_idx', None)
+
+        self.assertEqual(len(built), 1)
+        self.assertTrue(all(engine is engines[0] for engine in engines))
+
+    def test_cleared_engine_is_rebuilt_not_reused(self):
+        '''
+        Invalidating the cache forces a fresh build, never a stale instance.
+
+        Construction and the cache pop both hold _rag_engines_lock, so an engine
+        built from pre-clear state can't be cached after invalidation; the first
+        get after a pop constructs a new instance.
+        '''
+        from rag_app import views
+
+        class _StubEngine:
+            def __init__(self, index_name):
+                self.index_name = index_name
+
+        with patch.object(views, 'RAGEngine', _StubEngine):
+            views._rag_engines.pop('rebuild_idx', None)
+            first = views.get_rag_engine('rebuild_idx')
+            with views._rag_engines_lock:
+                views._rag_engines.pop('rebuild_idx', None)
+            second = views.get_rag_engine('rebuild_idx')
+            views._rag_engines.pop('rebuild_idx', None)
+
+        self.assertIsNot(first, second)
 
 
 class WebViewsTest(TestCase):

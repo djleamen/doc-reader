@@ -29,8 +29,12 @@ from src.config import settings as rag_settings
 
 from .models import Document, DocumentIndex, Query, QuerySession
 
-# Global RAG engine instances (similar to FastAPI implementation)
+# Global RAG engine instances (similar to FastAPI implementation). Guarded by
+# ``_rag_engines_lock`` so concurrent request threads can't double-build an
+# engine or race the delete in ``clear_documents`` — matching the locking
+# already applied to ``_conversational_rags`` below.
 _rag_engines = {}
+_rag_engines_lock = threading.Lock()
 # Conversational engines are keyed by ``(session_key, index_name)`` so each
 # browser session keeps its own conversation history. Keying by index alone
 # let every session that queried the same index share one process-global
@@ -45,6 +49,42 @@ _MAX_CONVERSATIONAL_RAGS = 128
 logger = logging.getLogger(__name__)
 
 FILE_PROCESSING_ERROR_MESSAGE = 'An internal error occurred while processing this file.'
+
+# Length bounds for the raw-JSON query path. The serializer-backed Azure views
+# cap these via CharField (question<=5000, index_name<=255); the classic views
+# read them straight from the request and only bounded ``k``, so an oversized
+# question was accepted and persisted to a TextField. Mirror the serializer
+# bounds here (see QueryRequestSerializer / DocumentUploadSerializer).
+_MAX_QUESTION_LENGTH = 5000
+_MAX_INDEX_NAME_LENGTH = 255
+
+
+def _read_query_params(data):
+    """Extract and validate ``question``/``index_name`` from a raw-JSON body.
+
+    Shared by the classic query endpoints so their validation stays identical.
+    Returns ``(question, index_name, error)`` where ``error`` is a 400
+    ``Response`` for a missing/invalid field (or ``None`` when both are
+    acceptable). A non-string ``question`` is rejected before ``.strip()`` so a
+    JSON null/number/list/object yields 400 rather than an AttributeError (500).
+    """
+    def bad(message):
+        return None, None, Response(
+            {'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+    question = data.get('question', '')
+    if not isinstance(question, str):
+        return bad('question must be a string')
+    question = question.strip()
+    if not question:
+        return bad('Question is required')
+    if len(question) > _MAX_QUESTION_LENGTH:
+        return bad(f'question must be at most {_MAX_QUESTION_LENGTH} characters')
+    index_name = data.get('index_name', 'default')
+    if not isinstance(index_name, str) or len(index_name) > _MAX_INDEX_NAME_LENGTH:
+        return bad(
+            f'index_name must be a string of at most {_MAX_INDEX_NAME_LENGTH} characters')
+    return question, index_name, None
 
 
 def _parse_request_data(request):
@@ -106,9 +146,19 @@ def get_rag_engine(index_name: str = "default"):
     :param index_name: Name of the document index
     :return: RAGEngine instance for the specified index
     '''
-    if index_name not in _rag_engines:
-        _rag_engines[index_name] = RAGEngine(index_name=index_name)
-    return _rag_engines[index_name]
+    # Construct under the lock so construction and invalidation stay ordered:
+    # building outside the lock would let clear_documents() pop the cache while
+    # an engine that loaded the pre-clear index from disk is still in flight,
+    # which would then be cached as stale. Holding the lock across the build also
+    # prevents two threads from building duplicate engines for the same key.
+    # Construction is infrequent (once per index until it is cleared), so the
+    # brief serialisation is an acceptable cost for correctness here.
+    with _rag_engines_lock:
+        engine = _rag_engines.get(index_name)
+        if engine is None:
+            engine = RAGEngine(index_name=index_name)
+            _rag_engines[index_name] = engine
+        return engine
 
 
 def get_conversational_rag(index_name: str = "default", session_key: Optional[str] = None):
@@ -209,6 +259,10 @@ class DocumentUploadView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             index_name = request.POST.get('index_name', 'default')
+            if len(index_name) > _MAX_INDEX_NAME_LENGTH:
+                return Response({
+                    'error': f'index_name must be at most {_MAX_INDEX_NAME_LENGTH} characters'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
             # Get or create DocumentIndex
             index, _ = DocumentIndex.objects.get_or_create(name=index_name)
@@ -324,13 +378,9 @@ class QueryView(APIView):
         try:
             data = _parse_request_data(request)
 
-            question = data.get('question', '').strip()
-            if not question:
-                return Response({
-                    'error': 'Question is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            index_name = data.get('index_name', 'default')
+            question, index_name, error = _read_query_params(data)
+            if error is not None:
+                return error
 
             # Validate k before it reaches the retriever. This raw-JSON path
             # bypasses QueryRequestSerializer, so a string, negative, or huge
@@ -436,13 +486,9 @@ class ConversationalQueryView(APIView):
         try:
             data = _parse_request_data(request)
 
-            question = data.get('question', '').strip()
-            if not question:
-                return Response({
-                    'error': 'Question is required'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            index_name = data.get('index_name', 'default')
+            question, index_name, error = _read_query_params(data)
+            if error is not None:
+                return error
 
             # Ensure session exists and has a key
             if not request.session.session_key:
@@ -637,8 +683,8 @@ def clear_documents(request):
         rag_engine.clear_index()
 
         # Clear RAG engine cache
-        if index_name in _rag_engines:
-            del _rag_engines[index_name]
+        with _rag_engines_lock:
+            _rag_engines.pop(index_name, None)
         # Conversational engines are keyed by (session_key, index_name); drop
         # every session's engine for this index, not just a single entry.
         # Snapshot and delete under the shared lock so a concurrent get/clear
