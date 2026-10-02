@@ -137,20 +137,18 @@ def get_rag_engine(index_name: str = "default"):
     :param index_name: Name of the document index
     :return: RAGEngine instance for the specified index
     '''
+    # Construct under the lock so construction and invalidation stay ordered:
+    # building outside the lock would let clear_documents() pop the cache while
+    # an engine that loaded the pre-clear index from disk is still in flight,
+    # which would then be cached as stale. Holding the lock across the build also
+    # prevents two threads from building duplicate engines for the same key.
+    # Construction is infrequent (once per index until it is cleared), so the
+    # brief serialisation is an acceptable cost for correctness here.
     with _rag_engines_lock:
         engine = _rag_engines.get(index_name)
-        if engine is not None:
-            return engine
-
-    # Build outside the lock so a slow engine init doesn't serialise every
-    # other cache access, then insert with a double-check in case a concurrent
-    # request created the same engine meanwhile (mirrors get_conversational_rag).
-    engine = RAGEngine(index_name=index_name)
-    with _rag_engines_lock:
-        existing = _rag_engines.get(index_name)
-        if existing is not None:
-            return existing
-        _rag_engines[index_name] = engine
+        if engine is None:
+            engine = RAGEngine(index_name=index_name)
+            _rag_engines[index_name] = engine
         return engine
 
 
@@ -371,7 +369,15 @@ class QueryView(APIView):
         try:
             data = _parse_request_data(request)
 
-            question = data.get('question', '').strip()
+            question = data.get('question', '')
+            # Reject a non-string question before .strip(): a JSON null, number,
+            # list, or object would otherwise raise AttributeError (HTTP 500)
+            # instead of the intended 400.
+            if not isinstance(question, str):
+                return Response({
+                    'error': 'question must be a string'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            question = question.strip()
             if not question:
                 return Response({
                     'error': 'Question is required'
@@ -487,7 +493,15 @@ class ConversationalQueryView(APIView):
         try:
             data = _parse_request_data(request)
 
-            question = data.get('question', '').strip()
+            question = data.get('question', '')
+            # Reject a non-string question before .strip(): a JSON null, number,
+            # list, or object would otherwise raise AttributeError (HTTP 500)
+            # instead of the intended 400.
+            if not isinstance(question, str):
+                return Response({
+                    'error': 'question must be a string'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            question = question.strip()
             if not question:
                 return Response({
                     'error': 'Question is required'

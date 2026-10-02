@@ -490,6 +490,125 @@ class APIViewsTest(TestCase):
         self.assertIn('Unsupported file type', data['errors'][0])
         self.assertEqual(Document.objects.count(), 0)
 
+    def test_query_rejects_oversized_question(self):
+        '''
+        Test the query endpoint rejects an over-length question.
+
+        A question beyond the 5000-char cap must return 400 (mirroring
+        QueryRequestSerializer) rather than being persisted unbounded.
+        '''
+        response = self.client.post(
+            '/api/query/',
+            json.dumps({'question': 'a' * 5001, 'index_name': 'test_index'}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_query_accepts_boundary_question_length(self):
+        '''
+        Test a 5000-char question passes length validation.
+
+        Targeting a non-existent index isolates the check to a 404 (not a 400),
+        confirming the boundary value was accepted without invoking the engine.
+        '''
+        response = self.client.post(
+            '/api/query/',
+            json.dumps({'question': 'a' * 5000, 'index_name': 'nonexistent'}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 404)
+
+    def test_query_rejects_non_string_question(self):
+        '''
+        Test the query endpoint rejects a non-string question.
+
+        A JSON number/null/list must return 400, not raise AttributeError on
+        .strip() and surface as a 500.
+        '''
+        response = self.client.post(
+            '/api/query/',
+            json.dumps({'question': 123, 'index_name': 'test_index'}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_query_rejects_oversized_index_name(self):
+        '''
+        Test the query endpoint rejects an over-length index_name.
+
+        Mirrors the serializer's 255-char CharField bound.
+        '''
+        response = self.client.post(
+            '/api/query/',
+            json.dumps({'question': 'Test question', 'index_name': 'i' * 256}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_query_accepts_boundary_index_name_length(self):
+        '''
+        Test a 255-char index_name passes length validation.
+
+        A non-existent name of the boundary length yields 404, confirming the
+        bound did not reject it.
+        '''
+        response = self.client.post(
+            '/api/query/',
+            json.dumps({'question': 'Test question', 'index_name': 'i' * 255}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 404)
+
+    def test_query_rejects_non_string_index_name(self):
+        '''
+        Test the query endpoint rejects a non-string index_name.
+        '''
+        response = self.client.post(
+            '/api/query/',
+            json.dumps({'question': 'Test question', 'index_name': 123}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_conversational_query_rejects_non_string_question(self):
+        '''
+        Test the conversational query endpoint rejects a non-string question.
+        '''
+        response = self.client.post(
+            '/api/conversational-query/',
+            json.dumps({'question': 123, 'index_name': 'test_index'}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_conversational_query_rejects_non_string_index_name(self):
+        '''
+        Test the conversational query endpoint rejects a non-string index_name.
+        '''
+        response = self.client.post(
+            '/api/conversational-query/',
+            json.dumps({'question': 'Test question', 'index_name': 123}),
+            content_type='application/json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
+    def test_upload_rejects_oversized_index_name(self):
+        '''
+        Test the upload endpoint rejects an over-length index_name.
+
+        The classic upload path reads index_name straight from POST; it is
+        capped at 255 chars to match DocumentUploadSerializer.
+        '''
+        test_file = SimpleUploadedFile(
+            "test.txt",
+            b"content",
+            content_type="text/plain"
+        )
+        response = self.client.post('/api/upload-documents/', {
+            'files': [test_file],
+            'index_name': 'i' * 256
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+
 
 class WebViewsTest(TestCase):
     '''
