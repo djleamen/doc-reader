@@ -5,6 +5,8 @@ Written by DJ Leamen (2025-2026)
 """
 
 import json
+import threading
+import time
 import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -535,6 +537,64 @@ class APIViewsTest(TestCase):
         resp = self.client.post(
             '/api/upload-documents/', {'files': [upload], 'index_name': 'i' * 256})
         self.assertEqual(resp.status_code, 400)
+
+    def test_get_rag_engine_constructs_once_under_concurrency(self):
+        '''
+        Concurrent cache misses build exactly one engine.
+
+        get_rag_engine constructs under _rag_engines_lock, so parallel callers
+        that all miss the same index share a single RAGEngine instance rather
+        than each building their own.
+        '''
+        from rag_app import views
+
+        built = []
+
+        class _StubEngine:
+            def __init__(self, index_name):
+                time.sleep(0.02)  # widen the window for thread overlap
+                built.append(index_name)
+
+        with patch.object(views, 'RAGEngine', _StubEngine):
+            views._rag_engines.pop('concurrent_idx', None)
+            engines = []
+
+            def worker():
+                engines.append(views.get_rag_engine('concurrent_idx'))
+
+            threads = [threading.Thread(target=worker) for _ in range(5)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            views._rag_engines.pop('concurrent_idx', None)
+
+        self.assertEqual(len(built), 1)
+        self.assertTrue(all(engine is engines[0] for engine in engines))
+
+    def test_cleared_engine_is_rebuilt_not_reused(self):
+        '''
+        Invalidating the cache forces a fresh build, never a stale instance.
+
+        Construction and the cache pop both hold _rag_engines_lock, so an engine
+        built from pre-clear state can't be cached after invalidation; the first
+        get after a pop constructs a new instance.
+        '''
+        from rag_app import views
+
+        class _StubEngine:
+            def __init__(self, index_name):
+                self.index_name = index_name
+
+        with patch.object(views, 'RAGEngine', _StubEngine):
+            views._rag_engines.pop('rebuild_idx', None)
+            first = views.get_rag_engine('rebuild_idx')
+            with views._rag_engines_lock:
+                views._rag_engines.pop('rebuild_idx', None)
+            second = views.get_rag_engine('rebuild_idx')
+            views._rag_engines.pop('rebuild_idx', None)
+
+        self.assertIsNot(first, second)
 
 
 class WebViewsTest(TestCase):
