@@ -68,29 +68,22 @@ def _read_query_params(data):
     acceptable). A non-string ``question`` is rejected before ``.strip()`` so a
     JSON null/number/list/object yields 400 rather than an AttributeError (500).
     """
+    def bad(message):
+        return None, None, Response(
+            {'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
     question = data.get('question', '')
     if not isinstance(question, str):
-        return None, None, Response(
-            {'error': 'question must be a string'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return bad('question must be a string')
     question = question.strip()
     if not question:
-        return None, None, Response(
-            {'error': 'Question is required'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return bad('Question is required')
     if len(question) > _MAX_QUESTION_LENGTH:
-        return None, None, Response(
-            {'error': f'question must be at most {_MAX_QUESTION_LENGTH} characters'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return bad(f'question must be at most {_MAX_QUESTION_LENGTH} characters')
     index_name = data.get('index_name', 'default')
     if not isinstance(index_name, str) or len(index_name) > _MAX_INDEX_NAME_LENGTH:
-        return None, None, Response(
-            {'error': f'index_name must be a string of at most {_MAX_INDEX_NAME_LENGTH} characters'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return bad(
+            f'index_name must be a string of at most {_MAX_INDEX_NAME_LENGTH} characters')
     return question, index_name, None
 
 
