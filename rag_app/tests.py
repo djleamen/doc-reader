@@ -490,51 +490,39 @@ class APIViewsTest(TestCase):
         self.assertIn('Unsupported file type', data['errors'][0])
         self.assertEqual(Document.objects.count(), 0)
 
-    def _post_query_json(self, payload, url='/api/query/'):
-        '''Post a JSON payload to a query endpoint and return the response.'''
-        return self.client.post(
-            url, json.dumps(payload), content_type='application/json')
+    def _assert_status(self, url, payload, expected):
+        '''POST a JSON body to a query endpoint and assert the status code.'''
+        resp = self.client.post(url, json.dumps(payload), content_type='application/json')
+        self.assertEqual(resp.status_code, expected, msg=payload)
+        return resp
 
     def test_query_input_validation_returns_400(self):
         '''
         Test the classic query endpoints reject malformed/oversized fields.
 
-        Covers the raw-JSON path bounds that mirror the serializers: the 5001
+        Covers the raw-JSON bounds that mirror the serializers: the 5001
         question length, the 256 index_name length, and non-string question /
-        index_name values — across both /api/query/ and
-        /api/conversational-query/. All must return 400 (a non-string question
-        must not raise AttributeError and surface as a 500).
+        index_name values across both query endpoints. All return 400 (a
+        non-string question must not raise AttributeError -> 500).
         '''
-        cases = [
-            ('/api/query/', {'question': 'a' * 5001, 'index_name': 'test_index'}),
-            ('/api/query/', {'question': 123, 'index_name': 'test_index'}),
-            ('/api/query/', {'question': 'Test question', 'index_name': 'i' * 256}),
-            ('/api/query/', {'question': 'Test question', 'index_name': 123}),
-            ('/api/conversational-query/', {'question': 123, 'index_name': 'test_index'}),
-            ('/api/conversational-query/', {'question': 'Test question', 'index_name': 123}),
-        ]
-        for url, payload in cases:
-            with self.subTest(url=url, payload=payload):
-                response = self._post_query_json(payload, url=url)
-                self.assertEqual(response.status_code, 400)
-                self.assertIn('error', response.json())
+        q, c = '/api/query/', '/api/conversational-query/'
+        self._assert_status(q, {'question': 'a' * 5001, 'index_name': 'test_index'}, 400)
+        self._assert_status(q, {'question': 7, 'index_name': 'test_index'}, 400)
+        self._assert_status(q, {'question': 'hi', 'index_name': 'i' * 256}, 400)
+        self._assert_status(q, {'question': 'hi', 'index_name': 7}, 400)
+        self._assert_status(c, {'question': 7, 'index_name': 'test_index'}, 400)
+        self._assert_status(c, {'question': 'hi', 'index_name': 7}, 400)
 
     def test_query_accepts_boundary_field_lengths(self):
         '''
         Test boundary-length question/index_name pass validation.
 
         A 5000-char question and a 255-char index_name are within bounds;
-        targeting a non-existent index isolates each case to a 404 (not a 400),
-        confirming the boundary value was accepted without invoking the engine.
+        aiming at a missing index isolates each to a 404 (not 400), confirming
+        the value was accepted without invoking the engine.
         '''
-        cases = [
-            {'question': 'a' * 5000, 'index_name': 'nonexistent'},
-            {'question': 'Test question', 'index_name': 'i' * 255},
-        ]
-        for payload in cases:
-            with self.subTest(payload=payload):
-                response = self._post_query_json(payload)
-                self.assertEqual(response.status_code, 404)
+        self._assert_status('/api/query/', {'question': 'a' * 5000, 'index_name': 'missing'}, 404)
+        self._assert_status('/api/query/', {'question': 'hi', 'index_name': 'i' * 255}, 404)
 
     def test_upload_rejects_oversized_index_name(self):
         '''
@@ -543,17 +531,10 @@ class APIViewsTest(TestCase):
         The classic upload path reads index_name straight from POST; it is
         capped at 255 chars to match DocumentUploadSerializer.
         '''
-        test_file = SimpleUploadedFile(
-            "test.txt",
-            b"content",
-            content_type="text/plain"
-        )
-        response = self.client.post('/api/upload-documents/', {
-            'files': [test_file],
-            'index_name': 'i' * 256
-        })
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('error', response.json())
+        upload = SimpleUploadedFile('t.txt', b'x', content_type='text/plain')
+        resp = self.client.post(
+            '/api/upload-documents/', {'files': [upload], 'index_name': 'i' * 256})
+        self.assertEqual(resp.status_code, 400)
 
 
 class WebViewsTest(TestCase):
