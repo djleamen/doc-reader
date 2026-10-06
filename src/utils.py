@@ -321,6 +321,11 @@ def validate_openai_api_key(api_key: str) -> bool:
     :param api_key: API key string to validate
     :return: True if format is valid, False otherwise
     '''
+    # A validator must answer, not crash: a missing/None key (e.g. an unset
+    # ``settings.pinecone_api_key`` which defaults to None) would otherwise
+    # raise AttributeError on ``.startswith`` instead of returning False.
+    if not isinstance(api_key, str):
+        return False
     return api_key.startswith('sk-') and len(api_key) > 20
 
 
