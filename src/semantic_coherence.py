@@ -7,6 +7,7 @@ embeddings to identify and mitigate information loss during retrieval and genera
 Written by DJ Leamen (2025-2026)
 """
 
+import os
 import random
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from langchain_core.documents import Document
 from loguru import logger
 
 from src.config import settings
+from src.vector_store import LocalEmbeddings
 
 
 def cosine_similarity_numpy(a: np.ndarray, b: np.ndarray) -> float:
@@ -115,9 +117,21 @@ class SemanticCoherenceValidator:
         :param coherence_thresholds: Custom threshold values for coherence levels
         :param fallback_config: Custom configuration for fallback actions
         '''
-        self.embeddings = OpenAIEmbeddings(
-            model=settings.embedding_model
-        )
+        # Mirror the vector store's embedding selection so coherence validation
+        # works in local-embeddings mode. Otherwise embed_query here would fail
+        # (no OpenAI key), fall back to zero vectors, and flag every answer as
+        # CRITICAL. Apply the shared request timeout to OpenAI calls as well.
+        use_local = os.getenv("USE_LOCAL_EMBEDDINGS", "false").lower() == "true"
+        if use_local or not settings.openai_api_key:
+            logger.info("SemanticCoherenceValidator using local embeddings (sentence-transformers)")
+            self.embeddings = LocalEmbeddings("all-MiniLM-L6-v2")
+            self.embedding_dim = 384  # all-MiniLM-L6-v2 output dimension
+        else:
+            self.embeddings = OpenAIEmbeddings(
+                model=settings.embedding_model,
+                timeout=settings.request_timeout
+            )
+            self.embedding_dim = 1536  # OpenAI embedding dimension
 
         # Default coherence thresholds from config
         self.thresholds = coherence_thresholds or {
@@ -197,8 +211,8 @@ class SemanticCoherenceValidator:
             return np.array(embedding).reshape(1, -1)
         except Exception as e:
             logger.error(f"Error getting embedding: {e}")
-            # Return zero vector as fallback
-            return np.zeros((1, 1536))  # Default OpenAI embedding dimension
+            # Return zero vector as fallback (matching the active model's dimension)
+            return np.zeros((1, self.embedding_dim))
 
     def _get_chunk_embeddings(self, chunks: List[Document]) -> List[np.ndarray]:
         '''
@@ -215,8 +229,8 @@ class SemanticCoherenceValidator:
                 embeddings.append(np.array(embedding).reshape(1, -1))
             except Exception as e:
                 logger.error(f"Error getting chunk embedding: {e}")
-                # Use zero vector as fallback
-                embeddings.append(np.zeros((1, 1536)))
+                # Use zero vector as fallback (matching the active model's dimension)
+                embeddings.append(np.zeros((1, self.embedding_dim)))
 
         return embeddings
 
