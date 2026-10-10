@@ -131,7 +131,8 @@ class FAISSVectorStore(VectorStoreManager):
             logger.info("Using OpenAI embeddings")
             # Note: OpenAIEmbeddings will use OPENAI_API_KEY environment variable
             self.embeddings = OpenAIEmbeddings(
-                model=settings.embedding_model
+                model=settings.embedding_model,
+                timeout=settings.request_timeout
             )
 
         self.vector_store: Optional[FAISS] = None
@@ -267,7 +268,8 @@ class ChromaVectorStore(VectorStoreManager):
 
             # Note: OpenAIEmbeddings will use OPENAI_API_KEY environment variable
             self.embeddings = OpenAIEmbeddings(
-                model=settings.embedding_model
+                model=settings.embedding_model,
+                timeout=settings.request_timeout
             )
             self.vector_store: Optional[Chroma] = None
             self.collection_name = "document_collection"
