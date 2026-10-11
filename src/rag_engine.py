@@ -60,7 +60,11 @@ class RAGEngine:
         # Initialize semantic coherence validator
         self.enable_coherence_validation = enable_coherence_validation
         if enable_coherence_validation:
-            self.coherence_validator = SemanticCoherenceValidator()
+            # Reuse the vector store's embedding backend so coherence validation
+            # doesn't load a second copy of the local model per cached engine.
+            self.coherence_validator = SemanticCoherenceValidator(
+                embeddings=self.document_index.vector_store.embeddings
+            )
             logger.info("Semantic coherence validation enabled")
         else:
             self.coherence_validator = None
