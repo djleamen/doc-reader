@@ -266,11 +266,21 @@ class ChromaVectorStore(VectorStoreManager):
         try:
             from langchain_community.vectorstores import Chroma
 
-            # Note: OpenAIEmbeddings will use OPENAI_API_KEY environment variable
-            self.embeddings = OpenAIEmbeddings(
-                model=settings.embedding_model,
-                timeout=settings.request_timeout
-            )
+            # Choose embeddings based on configuration
+            use_local = os.getenv("USE_LOCAL_EMBEDDINGS",
+                                  "false").lower() == "true"
+
+            if use_local or not settings.openai_api_key:
+                logger.info("Using local embeddings (sentence-transformers)")
+                self.embeddings = LocalEmbeddings("all-MiniLM-L6-v2")
+            else:
+                logger.info("Using OpenAI embeddings")
+                # Note: OpenAIEmbeddings will use OPENAI_API_KEY environment variable
+                self.embeddings = OpenAIEmbeddings(
+                    model=settings.embedding_model,
+                    timeout=settings.request_timeout
+                )
+
             self.vector_store: Optional[Chroma] = None
             self.collection_name = "document_collection"
 
