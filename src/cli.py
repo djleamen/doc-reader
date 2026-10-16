@@ -326,8 +326,10 @@ def main():
     query_parser = subparsers.add_parser("query", help="Query the document index")
     query_parser.add_argument("question", help="Question to ask")
     query_parser.add_argument("--top-k", type=int, default=5, help="Number of top results to retrieve")
-    query_parser.add_argument("--include-sources", action="store_true", default=True, help="Include source documents")
-    query_parser.add_argument("--include-scores", action="store_true", default=True, help="Include similarity scores")
+    query_parser.add_argument("--include-sources", dest="include_sources", action="store_true", default=True, help="Include source documents (default: on)")
+    query_parser.add_argument("--no-include-sources", dest="include_sources", action="store_false", help="Omit source documents from the output")
+    query_parser.add_argument("--include-scores", dest="include_scores", action="store_true", default=True, help="Include similarity scores (default: on)")
+    query_parser.add_argument("--no-include-scores", dest="include_scores", action="store_false", help="Omit similarity scores from the output")
     query_parser.add_argument("--conversational", action="store_true", help="Use conversational mode")
     query_parser.set_defaults(func=query_command)
 
