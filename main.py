@@ -99,7 +99,7 @@ def run_setup():
     print("Running first-time setup...")
     try:
         # First try without capturing output to see what happens
-        result = subprocess.run([sys.executable, "setup.py"], check=True)
+        subprocess.run([sys.executable, "setup.py"], check=True)
         print("Setup completed successfully!")
     except subprocess.CalledProcessError as e:
         print(f"Setup failed with exit code {e.returncode}")
