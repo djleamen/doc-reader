@@ -492,6 +492,29 @@ class APIViewsTest(TestCase):
         self.assertIn('Unsupported file type', data['errors'][0])
         self.assertEqual(Document.objects.count(), 0)
 
+    def test_upload_rejects_invalid_index_name_before_creating_it(self):
+        '''
+        An index name that can't be a directory is a clear 400, and no
+        DocumentIndex row is created for it.
+        '''
+        test_file = SimpleUploadedFile("notes.txt", b"hello", content_type="text/plain")
+        response = self.client.post('/api/upload-documents/', {
+            'files': [test_file],
+            'index_name': 'my index/../x'
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Invalid index_name', response.json()['error'])
+        self.assertFalse(DocumentIndex.objects.filter(name='my index/../x').exists())
+
+    def test_query_rejects_index_name_with_trailing_newline(self):
+        '''``re.match('^...$')`` accepted "name\\n"; fullmatch must not.'''
+        response = self.client.post(
+            '/api/query/',
+            json.dumps({'question': 'What is this?', 'index_name': 'test_index\n'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 400)
+
     def _assert_status(self, url, payload, expected):
         '''POST a JSON body to a query endpoint and assert the status code.'''
         resp = self.client.post(url, json.dumps(payload), content_type='application/json')

@@ -9,6 +9,7 @@ Written by DJ Leamen (2025-2026)
 
 import os
 import json
+import re
 from typing import List, Optional, cast
 from pathlib import Path
 from abc import ABC, abstractmethod
@@ -24,6 +25,12 @@ from loguru import logger
 from src.config import settings
 
 NOT_INITIALIZED = "Vector store not initialized. Add documents first."
+
+
+# Index names become directory names under settings.index_dir. fullmatch (not
+# match with ``$``) so a trailing newline can't slip through.
+INDEX_NAME_PATTERN = re.compile(r'[A-Za-z0-9_-]+')
+INDEX_NAME_RULE = 'Only letters, numbers, dashes and underscores are allowed.'
 
 class LocalEmbeddings(Embeddings):
     '''
@@ -394,13 +401,10 @@ class DocumentIndex:
         :param index_name: Name of the index (alphanumeric, dashes, underscores only)
         :raises ValueError: If index name is invalid or leads to unsafe path
         '''
-        import re
         from os.path import normpath, realpath
 
-        # Validate index_name with a regex pattern
-        if not re.match(r'^[a-zA-Z0-9_-]+$', index_name):
-            raise ValueError(
-                f"Invalid index name: {index_name}. Only alphanumeric characters, dashes, and underscores are allowed.")
+        if not INDEX_NAME_PATTERN.fullmatch(index_name):
+            raise ValueError(f"Invalid index name: {index_name!r}. {INDEX_NAME_RULE}")
 
         self.index_name = index_name
         self.vector_store = VectorStoreFactory.create_vector_store()
