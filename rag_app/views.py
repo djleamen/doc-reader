@@ -25,6 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from src.rag_engine import ConversationalRAG, RAGEngine
+from src.vector_store import INDEX_NAME_PATTERN, INDEX_NAME_RULE
 from src.config import settings as rag_settings
 
 from .models import Document, DocumentIndex, Query, QuerySession
@@ -81,10 +82,19 @@ def _read_query_params(data):
     if len(question) > _MAX_QUESTION_LENGTH:
         return bad(f'question must be at most {_MAX_QUESTION_LENGTH} characters')
     index_name = data.get('index_name', 'default')
-    if not isinstance(index_name, str) or len(index_name) > _MAX_INDEX_NAME_LENGTH:
-        return bad(
-            f'index_name must be a string of at most {_MAX_INDEX_NAME_LENGTH} characters')
+    index_error = _index_name_error(index_name)
+    if index_error:
+        return bad(index_error)
     return question, index_name, None
+
+
+def _index_name_error(index_name):
+    """Return a user-facing message if ``index_name`` can't name an index."""
+    if not isinstance(index_name, str) or len(index_name) > _MAX_INDEX_NAME_LENGTH:
+        return f'index_name must be a string of at most {_MAX_INDEX_NAME_LENGTH} characters'
+    if not INDEX_NAME_PATTERN.fullmatch(index_name):
+        return f'Invalid index_name {index_name!r}. {INDEX_NAME_RULE}'
+    return None
 
 
 def _parse_request_data(request):
@@ -259,10 +269,11 @@ class DocumentUploadView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             index_name = request.POST.get('index_name', 'default')
-            if len(index_name) > _MAX_INDEX_NAME_LENGTH:
-                return Response({
-                    'error': f'index_name must be at most {_MAX_INDEX_NAME_LENGTH} characters'
-                }, status=status.HTTP_400_BAD_REQUEST)
+            # Validate before get_or_create so a bad name returns a clear 400
+            # instead of a stray DocumentIndex row and a generic per-file error.
+            index_error = _index_name_error(index_name)
+            if index_error:
+                return Response({'error': index_error}, status=status.HTTP_400_BAD_REQUEST)
 
             # Get or create DocumentIndex
             index, _ = DocumentIndex.objects.get_or_create(name=index_name)
