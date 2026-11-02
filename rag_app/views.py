@@ -24,7 +24,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from src.rag_engine import ConversationalRAG, RAGEngine
+from src.rag_engine import AnswerGenerationError, ConversationalRAG, RAGEngine
 from src.vector_store import INDEX_NAME_PATTERN, INDEX_NAME_RULE
 from src.config import settings as rag_settings
 
@@ -95,6 +95,21 @@ def _index_name_error(index_name):
     if not INDEX_NAME_PATTERN.fullmatch(index_name):
         return f'Invalid index_name {index_name!r}. {INDEX_NAME_RULE}'
     return None
+
+
+def _read_query_options(data: dict) -> tuple[Optional[dict], Optional[Response]]:
+    """Validate shared retrieval options for both classic query endpoints."""
+    try:
+        k = int(data.get('k', rag_settings.top_k_results))
+    except (TypeError, ValueError):
+        return None, Response({'error': 'k must be an integer'}, status=status.HTTP_400_BAD_REQUEST)
+    if not 1 <= k <= 20:
+        return None, Response({'error': 'k must be between 1 and 20'}, status=status.HTTP_400_BAD_REQUEST)
+    return {
+        'k': k,
+        'include_sources': _coerce_bool(data.get('include_sources', True)),
+        'include_scores': _coerce_bool(data.get('include_scores', True)),
+    }, None
 
 
 def _parse_request_data(request):
@@ -393,24 +408,12 @@ class QueryView(APIView):
             if error is not None:
                 return error
 
-            # Validate k before it reaches the retriever. This raw-JSON path
-            # bypasses QueryRequestSerializer, so a string, negative, or huge
-            # value would otherwise pass straight through; mirror the
-            # serializer's 1-20 bound (IntegerField(min_value=1, max_value=20)).
-            k = data.get('k', rag_settings.top_k_results)
-            try:
-                k = int(k)
-            except (TypeError, ValueError):
-                return Response({
-                    'error': 'k must be an integer'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            if not 1 <= k <= 20:
-                return Response({
-                    'error': 'k must be between 1 and 20'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            include_sources = _coerce_bool(data.get('include_sources', True))
-            include_scores = _coerce_bool(data.get('include_scores', True))
+            options, error = _read_query_options(data)
+            if error is not None:
+                return error
+            k = options['k']
+            include_sources = options['include_sources']
+            include_scores = options['include_scores']
 
             # Get index
             try:
@@ -467,6 +470,12 @@ class QueryView(APIView):
 
                 return Response(response_data)
 
+            except AnswerGenerationError as e:
+                logger.warning("Answer generation unavailable: %s", e.code)
+                return Response({
+                    'error': str(e),
+                    'error_code': e.code,
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             except (OSError, ValueError, RuntimeError) as e:
                 logger.error("Query execution failed: %s", e, exc_info=True)
                 return Response({
@@ -501,6 +510,10 @@ class ConversationalQueryView(APIView):
             if error is not None:
                 return error
 
+            options, error = _read_query_options(data)
+            if error is not None:
+                return error
+
             # Ensure session exists and has a key
             if not request.session.session_key:
                 request.session.create()
@@ -531,7 +544,7 @@ class ConversationalQueryView(APIView):
             conversational_rag = get_conversational_rag(index_name, session_key)
 
             try:
-                result = conversational_rag.conversational_query(question)
+                result = conversational_rag.conversational_query(question, **options)
                 response_time = time.time() - start_time
 
                 # Save query record
@@ -540,19 +553,36 @@ class ConversationalQueryView(APIView):
                     index=index,
                     question=question,
                     answer=result.answer,
+                    k_results=options['k'],
+                    include_sources=options['include_sources'],
+                    include_scores=options['include_scores'],
                     response_time=response_time,
                     context_length=result.metadata.get('context_length', 0),
                     retrieval_count=result.metadata.get('retrieval_count', 0),
                     model_used=result.metadata.get('model_used', '')
                 )
 
-                return Response({
+                response_data = {
                     'query': question,
                     'answer': result.answer,
                     'metadata': result.metadata,
                     'session_id': str(query_session.id)
-                })
+                }
+                if options['include_sources']:
+                    response_data['source_documents'] = [
+                        {'content': doc.page_content, 'metadata': doc.metadata}
+                        for doc in result.source_documents
+                    ]
+                if options['include_scores']:
+                    response_data['confidence_scores'] = result.confidence_scores
+                return Response(response_data)
 
+            except AnswerGenerationError as e:
+                logger.warning("Conversational answer generation unavailable: %s", e.code)
+                return Response({
+                    'error': str(e),
+                    'error_code': e.code,
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             except (OSError, ValueError, RuntimeError):
                 logger.error("Conversational query failed", exc_info=True)
                 return Response({

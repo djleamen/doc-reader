@@ -45,12 +45,31 @@ After retrieval and answer generation, the system compares embeddings across:
 - retrieved chunks → generated answer
 - query → generated answer
 
-If coherence drops, the system can:
-- increase retrieval depth
-- hedge the output language
-- flag low-confidence answers
+Answer support is measured separately: each answer sentence is compared with its
+best matching source passage (short overlapping windows avoid truncating long
+chunks in local embedding models). Question/chunk similarity remains a retrieval
+diagnostic; a generic summary question no longer makes a source-backed answer
+automatically "critical".
 
-This is intended to make failure modes more visible instead of silently returning overconfident answers.
+If answer/source similarity is low, the system can increase retrieval depth once
+and regenerate, then rescore the **new** answer against the **new** sources.
+Similarity diagnostics are shown separately rather than inserting random
+low-confidence language into the answer. Embedding failures are reported as
+unavailable, not fabricated zero scores.
+
+These are heuristic text-similarity scores, **not probabilities of factual
+correctness or an entailment check**; related but incorrect claims can still score
+well. Existing thresholds are unchanged. `confidence_scores` remains the API
+field for retrieval relevance scores for compatibility; it is not answer
+confidence. `metadata.answer_support_cosine` and
+`metadata.coherence_validation_status` expose the separate support diagnostic.
+
+Explicit corpus-wide requests such as "Summarize all documents" or "What are the
+main topics covered in the documents?" rank across the active index, prefer
+overview/introductory passages, and select sources in balanced rounds. When `k`
+is smaller than the number of files, only `k` files can be represented. Focused
+definition queries retain relevance-first retrieval. Corpus overviews scan all
+indexed candidates, so they cost more than focused lookups on large indexes.
 
 ## Architecture
 
@@ -145,6 +164,18 @@ with the signed-in user. Create the first account with:
 ```bash
 python manage.py createsuperuser
 ```
+
+### Answer-generation failures
+
+The Classic OpenAI pipeline needs available **API credits**, even when embeddings
+run locally. A ChatGPT subscription does not provide API credits. If the app
+reports exhausted credits/quota, check billing, project budget, and usage limits
+for the project associated with `OPENAI_API_KEY`. If you change the key, restart
+the app. Existing documents and indexes do not need to be uploaded again.
+
+Generation failures return HTTP 503 with an actionable `error` and an
+`error_code`, rather than being saved or scored as low-confidence answers.
+For example, exhausted credits return `openai_quota_exceeded`.
 
 ### API
 

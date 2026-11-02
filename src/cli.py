@@ -15,7 +15,7 @@ from typing import Union
 
 from loguru import logger
 from src.config import settings
-from src.rag_engine import RAGEngine, ConversationalRAG
+from src.rag_engine import RAGEngine, ConversationalRAG, QueryResult
 
 def setup_logging():
     '''
@@ -67,6 +67,17 @@ def add_documents_command(args):
         sys.exit(1)
 
 
+def _print_support_diagnostics(result: QueryResult) -> None:
+    """Keep support diagnostics separate from the answer in both CLI modes."""
+    support = result.metadata.get("answer_support_cosine")
+    if support is not None:
+        print(f"\nAnswer/source similarity: {support:.3f} (heuristic, not factual confidence)")
+    if result.metadata.get("semantic_support_warning"):
+        print(result.metadata["semantic_support_warning"])
+    if result.metadata.get("coherence_validation_status") == "unavailable":
+        print("\nSemantic support checking unavailable; review the sources.")
+
+
 def _print_query_result(result, args):
     '''
     Print query result with optional sources and metadata.
@@ -80,6 +91,7 @@ def _print_query_result(result, args):
     print("\n" + "-"*80)
     print("ANSWER:")
     print(result.answer)
+    _print_support_diagnostics(result)
 
     if args.include_sources and result.source_documents:
         _print_source_documents(result, args)
@@ -102,7 +114,7 @@ def _print_source_documents(result, args):
     for i, doc in enumerate(result.source_documents, 1):
         score_text = ""
         if args.include_scores and i <= len(result.confidence_scores):
-            score_text = f" (Score: {result.confidence_scores[i-1]:.4f})"
+            score_text = f" (Retrieval relevance: {result.confidence_scores[i-1]:.4f})"
 
         print(f"\nSource {i}{score_text}:")
         print(f"File: {doc.metadata.get('filename', 'Unknown')}")
@@ -201,6 +213,7 @@ def _process_interactive_question(rag_engine, question, args):
         )
 
     print(f"\nAnswer: {result.answer}")
+    _print_support_diagnostics(result)
 
     if args.verbose:
         print(f"\nRetrieved {result.metadata.get('retrieval_count', 0)} relevant documents")

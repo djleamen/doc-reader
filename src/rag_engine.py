@@ -14,11 +14,21 @@ from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
 from langchain_core.prompts import PromptTemplate
 from loguru import logger
+from openai import AuthenticationError, APITimeoutError, OpenAIError, RateLimitError
 
 from src.config import settings
 from src.vector_store import DocumentIndex
 from src.document_processor import DocumentProcessor
 from src.semantic_coherence import SemanticCoherenceValidator, CoherenceMetrics, FallbackAction
+
+
+class AnswerGenerationError(RuntimeError):
+    """Expose a safe, actionable generation failure to callers."""
+
+    def __init__(self, message: str, code: str) -> None:
+        """Store the public message and machine-readable failure code."""
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass
@@ -110,6 +120,8 @@ Instructions:
 5. If there are multiple relevant chunks, synthesize them
 6. Prefer direct definitions when the context contains one
 7. Respond in paragraph format, avoid using markdown
+8. For summaries of multiple documents, cover the distinct topics in each provided source,
+   not just the course syllabus. State when the retrieved excerpts provide only partial coverage.
 
 Answer:'''
 
@@ -148,6 +160,17 @@ Answer:'''
             logger.warning("No documents were successfully processed")
             return 0
 
+    def _is_overview_question(self, question: str) -> bool:
+        """Identify explicit corpus-wide summaries without changing topic lookups."""
+        current_question = question.rsplit("Current question:", 1)[-1]
+        normalized = self._normalize_text(current_question)
+        corpus = re.search(r'\b(documents|files|notes|uploads|corpus)\b', normalized)
+        overview = re.search(
+            r'\b(summarize|summarise|summary|overview)\b|\b(main|key|major) topics\b',
+            normalized,
+        )
+        return bool(corpus and overview)
+
     def _retrieve_documents(self, question: str, k: int, include_scores: bool):
         '''
         Retrieve documents with optional similarity scores.
@@ -158,19 +181,22 @@ Answer:'''
         :return: Tuple of (source_documents, confidence_scores)
         '''
         initial_k = min(k * 3, 20)
+        overview = self._is_overview_question(question)
+        if overview:
+            initial_k = max(self.document_index.vector_store.document_count, 1)
 
-        if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
+        if hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
             doc_score_pairs = self.document_index.search_with_scores(
                 question, initial_k)
             filtered_pairs = self._rerank_and_filter_chunks(
                 question, doc_score_pairs, target_k=k)
             source_documents = [doc for doc, score in filtered_pairs]
-            confidence_scores = [float(score) for doc, score in filtered_pairs]
+            confidence_scores = [float(score) for doc, score in filtered_pairs] if include_scores else []
         else:
             source_documents = self.document_index.search(question, initial_k)
             source_documents = self._filter_chunks_by_relevance(
                 question, source_documents, target_k=k)
-            confidence_scores = [1.0] * len(source_documents)
+            confidence_scores = []
 
         return source_documents, confidence_scores
 
@@ -191,9 +217,34 @@ Answer:'''
                 answer = str(answer)
             logger.info("Successfully generated answer")
             return answer.strip()
-        except Exception as e:
-            logger.error(f"Error generating answer: {e}")
-            return "I encountered an error while generating the answer. Please try again."
+        except OpenAIError as error:
+            code = getattr(error, "code", None)
+            body = getattr(error, "body", None)
+            error_type = body.get("type") if isinstance(body, dict) else None
+            logger.error(
+                "OpenAI generation failed: type={}, status={}, code={}",
+                type(error).__name__, getattr(error, "status_code", None), code,
+            )
+            if code in {"insufficient_quota", "credit_balance_exhausted"} or error_type == "insufficient_quota":
+                message = (
+                    "OpenAI API credits or quota are exhausted. Check billing and usage "
+                    "limits for the project associated with OPENAI_API_KEY, then retry. "
+                    "Your documents do not need to be uploaded again."
+                )
+                public_code = "openai_quota_exceeded"
+            elif isinstance(error, AuthenticationError):
+                message = "OpenAI rejected the API key. Check OPENAI_API_KEY and restart the app."
+                public_code = "openai_authentication_failed"
+            elif isinstance(error, APITimeoutError):
+                message = "OpenAI answer generation timed out. Please retry."
+                public_code = "openai_timeout"
+            elif isinstance(error, RateLimitError):
+                message = "OpenAI's request rate limit was reached. Wait briefly, then retry."
+                public_code = "openai_rate_limited"
+            else:
+                message = "OpenAI answer generation failed. Check the server logs and model configuration, then retry."
+                public_code = "openai_generation_failed"
+            raise AnswerGenerationError(message, public_code) from error
 
     def _apply_coherence_boost(self, question: str, fallback_action, original_k: int,
                                include_scores: bool):
@@ -215,22 +266,9 @@ Answer:'''
         logger.info(
             f"Boosting k from {original_k} to {fallback_action.new_k_value}")
 
-        if include_scores and hasattr(self.document_index.vector_store, 'similarity_search_with_score'):
-            boosted_doc_score_pairs = self.document_index.search_with_scores(
-                question, fallback_action.new_k_value)
-            boosted_pairs = self._rerank_and_filter_chunks(
-                question,
-                boosted_doc_score_pairs,
-                target_k=fallback_action.new_k_value,
-            )
-            boosted_source_documents = [
-                doc for doc, score in boosted_pairs]
-            boosted_confidence_scores = [
-                float(score) for doc, score in boosted_pairs]
-        else:
-            boosted_source_documents = self.document_index.search(
-                question, fallback_action.new_k_value)
-            boosted_confidence_scores = [1.0] * len(boosted_source_documents)
+        boosted_source_documents, boosted_confidence_scores = self._retrieve_documents(
+            question, fallback_action.new_k_value, include_scores,
+        )
 
         return boosted_source_documents, boosted_confidence_scores, None
 
@@ -248,10 +286,10 @@ Answer:'''
         :param fallback_action: FallbackAction object
         :param original_k: Original k value
         :param include_scores: Whether scores are available
-        :return: Tuple of (final_answer, source_documents, confidence_scores)
+        :return: Final answer, sources, scores, and the final diagnostic and action
         '''
         if not coherence_metrics.needs_fallback:
-            return answer, source_documents, confidence_scores
+            return answer, source_documents, confidence_scores, coherence_metrics, fallback_action
 
         logger.info(
             f"Applying coherence fallbacks. Level: {coherence_metrics.coherence_level.value}")
@@ -262,30 +300,19 @@ Answer:'''
 
         if boosted_docs and len(boosted_docs) > len(source_documents):
             boosted_context = self._prepare_context(boosted_docs, question)
+            answer = self._generate_answer(boosted_context, question)
+            source_documents = boosted_docs
+            confidence_scores = boosted_scores
+            logger.info("Regenerated answer with boosted retrieval; rescoring semantic support")
             try:
-                boosted_answer = self._generate_answer(
-                    boosted_context, question)
-                logger.info(
-                    "Successfully regenerated answer with boosted retrieval")
-                source_documents = boosted_docs
-                confidence_scores = boosted_scores
-                answer = boosted_answer
-            except Exception as e:
-                logger.error(f"Error regenerating answer with boosted k: {e}")
+                coherence_metrics, fallback_action = self.coherence_validator.validate_coherence(
+                    query=question, retrieved_chunks=source_documents, generated_answer=answer,
+                )
+            except (RuntimeError, ValueError, OSError):
+                logger.exception("Semantic support unavailable after regeneration")
+                return answer, source_documents, confidence_scores, None, None
 
-        # 2. Apply hedging
-        final_answer = answer
-        if fallback_action.hedge_output and self.coherence_validator:
-            final_answer = self.coherence_validator.get_hedged_response(
-                answer, coherence_metrics)
-            logger.debug("Applied hedging to response")
-
-        # 3. Add uncertainty warning
-        if fallback_action.flag_uncertainty and fallback_action.uncertainty_message:
-            final_answer = fallback_action.uncertainty_message + "\n\n" + final_answer
-            logger.debug("Added uncertainty flag to response")
-
-        return final_answer, source_documents, confidence_scores
+        return answer, source_documents, confidence_scores, coherence_metrics, fallback_action
 
     def _validate_and_apply_coherence(self, question: str, source_documents, answer: str,
                                       confidence_scores, original_k: int, include_scores: bool,
@@ -312,16 +339,14 @@ Answer:'''
                 generated_answer=answer
             )
 
-            final_answer, source_documents, confidence_scores = self._apply_coherence_fallbacks(
-                question, answer, source_documents, confidence_scores,
-                coherence_metrics, fallback_action, original_k, include_scores
-            )
-
-            return final_answer, source_documents, confidence_scores, coherence_metrics, fallback_action
-
-        except Exception as e:
-            logger.error(f"Error during coherence validation: {e}")
+        except (RuntimeError, ValueError, OSError):
+            logger.exception("Semantic support validation unavailable")
             return answer, source_documents, confidence_scores, None, None
+
+        return self._apply_coherence_fallbacks(
+            question, answer, source_documents, confidence_scores,
+            coherence_metrics, fallback_action, original_k, include_scores,
+        )
 
     def query(
         self,
@@ -383,6 +408,17 @@ Answer:'''
             "original_k": original_k,
             "final_k": len(source_documents),
             "coherence_validation_enabled": self.enable_coherence_validation,
+            "coherence_validation_status": (
+                "complete" if coherence_metrics else
+                "unavailable" if self.enable_coherence_validation and enable_coherence_fallback else
+                "disabled"
+            ),
+            "retrieved_source_count": len({
+                doc.metadata.get("source") or doc.metadata.get("filename", "unknown")
+                for doc in source_documents
+            }),
+            "retrieval_strategy": "corpus_overview" if self._is_overview_question(question) else "focused",
+            "score_kind": "retrieval_relevance",
             "exact_match_chunks": sum(
                 1 for doc in source_documents
                 if self._get_phrase_match_score(
@@ -399,6 +435,12 @@ Answer:'''
                 "chunk_generation_cosine": coherence_metrics.chunk_generation_cosine,
                 "query_generation_cosine": coherence_metrics.query_generation_cosine
             })
+            metadata["answer_support_cosine"] = coherence_metrics.answer_support_cosine
+            metadata["semantic_support_note"] = (
+                "Embedding similarity is a diagnostic, not a probability of factual correctness."
+            )
+            if fallback_action and fallback_action.flag_uncertainty:
+                metadata["semantic_support_warning"] = fallback_action.uncertainty_message
 
         return QueryResult(
             query=question,
@@ -567,7 +609,8 @@ Answer:'''
             length_penalty * 0.05
         )
 
-        return (doc, combined_score, doc.metadata.get('source', 'unknown'))
+        return (doc, combined_score,
+                doc.metadata.get('source') or doc.metadata.get('filename', 'unknown'))
 
     def _get_length_penalty(self, content_length: int) -> float:
         '''
@@ -583,16 +626,31 @@ Answer:'''
         else:
             return 1.0
 
-    def _select_diverse_chunks(self, scored_chunks: List[tuple], target_k: int) -> List[tuple]:
+    def _select_diverse_chunks(self, scored_chunks: List[tuple], target_k: int,
+                               balance_sources: bool = False) -> List[tuple]:
         '''
         Select chunks with source diversity preference.
         
         :param scored_chunks: List of (doc, score, source) tuples
         :param target_k: Target number of chunks to select
+        :param balance_sources: Select one chunk per source per round for overviews
         :return: List of (doc, score) tuples with diverse sources
         '''
         selected_chunks = []
         source_counts = {}
+        if balance_sources:
+            remaining = list(scored_chunks)
+            while remaining and len(selected_chunks) < target_k:
+                next_round = []
+                seen_sources = set()
+                for doc, score, source in remaining:
+                    if source in seen_sources or len(selected_chunks) >= target_k:
+                        next_round.append((doc, score, source))
+                    else:
+                        selected_chunks.append((doc, score))
+                        seen_sources.add(source)
+                remaining = next_round
+            return selected_chunks
 
         # First pass: Select top chunks with source diversity
         for doc, score, source in scored_chunks:
@@ -656,12 +714,25 @@ Answer:'''
                 doc, similarity_score, question_keywords, phrase_candidates)
             for doc, similarity_score in doc_score_pairs
         ]
+        if self._is_overview_question(question):
+            overview_chunks = []
+            for doc, score, source in scored_chunks:
+                chunk_id = doc.metadata.get("chunk_id")
+                if isinstance(chunk_id, int) and chunk_id >= 0:
+                    score += 0.15 / (1 + chunk_id)
+                if re.search(r'\b(at a glance|overview|contents|main topics)\b',
+                             self._normalize_text(doc.page_content)):
+                    score += 0.15
+                overview_chunks.append((doc, score, source))
+            scored_chunks = overview_chunks
 
         # Sort by combined score
         scored_chunks.sort(key=lambda x: x[1], reverse=True)
 
         # Apply diversity selection
-        selected_chunks = self._select_diverse_chunks(scored_chunks, target_k)
+        selected_chunks = self._select_diverse_chunks(
+            scored_chunks, target_k, balance_sources=self._is_overview_question(question),
+        )
 
         logger.info(
             f"Reranked {len(doc_score_pairs)} chunks to {len(selected_chunks)} using enhanced scoring")
@@ -684,6 +755,13 @@ Answer:'''
         '''
         if not documents:
             return []
+
+        if self._is_overview_question(question):
+            return [
+                doc for doc, _ in self._rerank_and_filter_chunks(
+                    question, [(doc, 1.0) for doc in documents], target_k,
+                )
+            ]
 
         question_words = set(self._normalize_text(question).split())
 

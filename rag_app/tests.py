@@ -9,16 +9,385 @@ import threading
 import time
 import uuid
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+import httpx
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import Client, TestCase
+from django.test import Client, SimpleTestCase, TestCase
 from rest_framework.permissions import AllowAny
+from langchain_core.documents import Document as SourceDocument
+from openai import APITimeoutError, AuthenticationError, RateLimitError
 
 from rag_app.models import Document, DocumentIndex, Query, QuerySession
+from src.rag_engine import ConversationalRAG, QueryResult, RAGEngine
+from src.semantic_coherence import CoherenceLevel, SemanticCoherenceValidator
+from src.vector_store import FAISSVectorStore
+
+
+class RetrievalAndCoherenceTest(SimpleTestCase):
+    """Exercise retrieval and evidence diagnostics without models or network."""
+
+    def setUp(self) -> None:
+        """Create an engine with deterministic search and embedding backends."""
+        self.engine = RAGEngine.__new__(RAGEngine)
+        self.engine.document_index = Mock()
+        self.engine.document_index.vector_store.document_count = 30
+        self.engine.enable_coherence_validation = True
+        self.engine.prompt_template = self.engine._create_prompt_template()
+
+    @staticmethod
+    def document(source: str, text: str) -> SourceDocument:
+        """Construct a source chunk with realistic metadata."""
+        return SourceDocument(page_content=text, metadata={"source": source, "filename": source})
+
+    def validator(self, vectors: dict) -> SemanticCoherenceValidator:
+        """Use a fixed embedding space with independently controlled relevance."""
+        embeddings = Mock()
+        embeddings.model = None
+        embeddings.embed_query.side_effect = lambda text: vectors[text]
+        embeddings.embed_documents.side_effect = lambda texts: [vectors[text] for text in texts]
+        return SemanticCoherenceValidator(embeddings=embeddings)
+
+    def test_overview_covers_sources_with_or_without_scores(self) -> None:
+        """Summary retrieval reaches beyond the first cluster and balances files."""
+        docs = [self.document("introduction", f"Course overview {i}.") for i in range(26)]
+        docs += [self.document(f"lecture-{i}", f"Lecture topic {i}.") for i in range(4)]
+        self.engine.document_index.search_with_scores.return_value = [(d, 0.1) for d in docs]
+        self.engine.document_index.search.return_value = docs
+        for include_scores in (True, False):
+            with self.subTest(include_scores=include_scores):
+                selected, _ = self.engine._retrieve_documents(
+                    "What are the main topics covered in the documents?", 5, include_scores,
+                )
+                self.assertEqual(len(selected), 5)
+                self.assertEqual(len({d.metadata["source"] for d in selected}), 5)
+        self.engine.document_index.search_with_scores.assert_called_with(
+            "What are the main topics covered in the documents?", 30,
+        )
+
+    def test_overview_detection_does_not_change_definition_queries(self) -> None:
+        """Only explicit corpus overviews opt into balanced retrieval."""
+        for question in (
+            "What is a Laplacian?", "Summarize bilateral filtering",
+            "What does this document say about edges?",
+        ):
+            with self.subTest(question=question):
+                self.assertFalse(self.engine._is_overview_question(question))
+        for question in (
+            "Summarize all documents", "Give an overview of my notes",
+            "What are the main topics covered in the documents?",
+        ):
+            with self.subTest(question=question):
+                self.assertTrue(self.engine._is_overview_question(question))
+
+    def test_overview_supports_backends_without_scores(self) -> None:
+        """Source balancing also works when only regular search is available."""
+        self.engine.document_index.vector_store = SimpleNamespace(document_count=30)
+        docs = [self.document("a", f"Topic {i}.") for i in range(28)]
+        docs += [self.document("b", "Filtering."), self.document("c", "Geometry.")]
+        self.engine.document_index.search.return_value = docs
+        selected, scores = self.engine._retrieve_documents("Summarize all documents", 3, False)
+        self.assertEqual(len({d.metadata["source"] for d in selected}), 3)
+        self.assertEqual(scores, [])
+
+    def test_loaded_index_count_does_not_use_ingestion_cache(self) -> None:
+        """A reloaded FAISS index still provides the full overview candidate pool."""
+        backend = FAISSVectorStore.__new__(FAISSVectorStore)
+        backend.vector_store = SimpleNamespace(index=SimpleNamespace(ntotal=116))
+        backend.documents = []
+        self.assertEqual(backend.document_count, 116)
+
+    def test_cli_labels_similarity_as_diagnostic(self) -> None:
+        """CLI users see separate heuristic support rather than answer hedging."""
+        from src.cli import _print_support_diagnostics
+
+        result = QueryResult(
+            query="question", answer="An answer.", source_documents=[], confidence_scores=[],
+            metadata={"answer_support_cosine": 0.708, "semantic_support_warning": "Review sources."},
+        )
+        with patch("builtins.print") as output:
+            _print_support_diagnostics(result)
+        printed = " ".join(call.args[0] for call in output.call_args_list)
+        self.assertIn("0.708", printed)
+        self.assertIn("not factual confidence", printed)
+        self.assertIn("Review sources.", printed)
+        self.assertEqual(result.answer, "An answer.")
+
+    def test_supported_answer_not_penalized_by_generic_question_or_other_chunks(self) -> None:
+        """Source-backed claims stay supported even with unrelated retrieved text."""
+        question, answer, other = "Summarize my notes", "Cameras project 3D points.", "Filters smooth noise."
+        validator = self.validator({question: [0, 0, 1], answer: [1, 0, 0], other: [0, 1, 0]})
+        metrics, action = validator.validate_coherence(
+            question, [self.document("camera", answer), self.document("filters", other)], answer,
+        )
+        self.assertAlmostEqual(metrics.query_chunk_cosine, 0)
+        self.assertAlmostEqual(metrics.answer_support_cosine, 1)
+        self.assertEqual(metrics.coherence_level, CoherenceLevel.HIGH)
+        self.assertFalse(action.boost_k)
+        self.assertFalse(action.flag_uncertainty)
+
+    def test_each_answer_sentence_needs_matching_evidence(self) -> None:
+        """One related sentence cannot hide unrelated content in a long answer."""
+        question, supported, unsupported = "What are cameras?", "Cameras project points.", "Bananas grow on Mars."
+        validator = self.validator({
+            question: [1, 0], supported: [1, 0], unsupported: [0, 1],
+            f"{supported} {unsupported}": [1, 0],
+        })
+        metrics, _ = validator.validate_coherence(
+            question, [self.document("camera", supported)], f"{supported} {unsupported}",
+        )
+        self.assertAlmostEqual(metrics.answer_support_cosine, 0.5)
+        self.assertTrue(metrics.needs_fallback)
+
+    def test_unrelated_answer_remains_flagged(self) -> None:
+        """The change must not simply inflate all confidence scores."""
+        question, source, answer = "Explain cameras", "Cameras project points.", "Bananas grow on Mars."
+        validator = self.validator({question: [1, 0], source: [1, 0], answer: [0, 1]})
+        metrics, action = validator.validate_coherence(question, [self.document("camera", source)], answer)
+        self.assertEqual(metrics.coherence_level, CoherenceLevel.CRITICAL)
+        self.assertTrue(action.flag_uncertainty)
+        self.assertIn("similarity", action.uncertainty_message)
+        self.assertNotIn("Low confidence", action.uncertainty_message)
+
+    def test_exact_source_sentences_are_supported(self) -> None:
+        """Copied source text stays supported despite sentence-level embedding drift."""
+        source = "First sentence. Second sentence."
+        validator = self.validator({
+            "question": [0, 0, 1], source: [1, 0, 0],
+            "First sentence.": [0, 1, 0], "Second sentence.": [0, 1, 0],
+        })
+        metrics, _ = validator.validate_coherence(
+            "question", [self.document("a", source)], source,
+        )
+        self.assertAlmostEqual(metrics.answer_support_cosine, 1)
+
+    def test_invalid_embedding_is_not_a_zero_confidence_score(self) -> None:
+        """Invalid vectors must be reported as unavailable."""
+        for vector in ([0, 0], [float("nan"), 1], []):
+            with self.subTest(vector=vector):
+                validator = self.validator({"question": vector})
+                with self.assertRaises(RuntimeError):
+                    validator.validate_coherence("question", [self.document("a", "source")], "answer")
+
+    def test_overview_prefers_topic_overviews_over_exercises(self) -> None:
+        """A generic summary should select overview material when it is available."""
+        docs = [
+            self.document("a", "Main topics exercise questions."),
+            self.document("b", "Main topics exercise questions."),
+            self.document("a", "Week at a glance. Camera geometry."),
+            self.document("b", "Week at a glance. Linear filtering."),
+        ]
+        docs[2].metadata["chunk_id"] = 0
+        docs[3].metadata["chunk_id"] = 0
+        selected = self.engine._rerank_and_filter_chunks(
+            "What are the main topics covered in the documents?", [(d, 0.1) for d in docs], 2,
+        )
+        self.assertEqual({d.page_content for d, _ in selected}, {d.page_content for d in docs[2:]})
+
+    def test_boost_reuses_balanced_retrieval(self) -> None:
+        """A fallback must not undo the initial summary's source diversity."""
+        docs = [self.document(f"source-{i % 5}", f"Topic {i}.") for i in range(30)]
+        self.engine.document_index.search_with_scores.return_value = [(d, 0.1) for d in docs]
+        selected, _, _ = self.engine._apply_coherence_boost(
+            "Summarize all documents", SimpleNamespace(boost_k=True, new_k_value=10), 5, True,
+        )
+        counts = {source: sum(d.metadata["source"] == source for d in selected)
+                  for source in {d.metadata["source"] for d in selected}}
+        self.assertEqual(set(counts.values()), {2})
+
+    def test_embedding_failure_is_unavailable_not_zero_confidence(self) -> None:
+        """A broken embedding service must not produce fabricated zero scores."""
+        validator = self.validator({})
+        validator.embeddings.embed_query.side_effect = RuntimeError("Embedding service offline")
+        with self.assertRaises(RuntimeError):
+            validator.validate_coherence("question", [self.document("a", "source")], "answer")
+
+    def test_regeneration_is_rescored_and_answer_not_hedged(self) -> None:
+        """Final metadata and fallback decisions describe the regenerated answer."""
+        question = "What are cameras?"
+        source, unrelated = "Cameras project points.", "Bananas grow on Mars."
+        self.engine.coherence_validator = self.validator({
+            question: [1, 0], source: [1, 0], unrelated: [0, 1],
+        })
+        self.engine._retrieve_documents = Mock(return_value=([self.document("a", source)], [0.8]))
+        boosted = [self.document("a", source), self.document("b", source)]
+        self.engine._apply_coherence_boost = Mock(return_value=(boosted, [0.8, 0.8], None))
+        self.engine._generate_answer = Mock(side_effect=[unrelated, source])
+        result = self.engine.query(question)
+        self.assertEqual(result.answer, source)
+        self.assertEqual(result.metadata["coherence_level"], "high")
+        self.assertAlmostEqual(result.metadata["answer_support_cosine"], 1)
+        self.assertEqual(result.coherence_metrics.num_chunks, 2)
+        self.assertFalse(result.fallback_action.flag_uncertainty)
+        self.engine._generate_answer.assert_called()
+        self.assertEqual(self.engine._generate_answer.call_count, 2)
+
+    def test_validation_failure_preserves_regenerated_answer_and_reports_unavailable(self) -> None:
+        """A failed rescore must neither restore an old answer nor invent metrics."""
+        self.engine._retrieve_documents = Mock(return_value=([self.document("a", "Source.")], [0.8]))
+        validator = self.validator({"question": [1, 0], "Source.": [1, 0], "Unrelated.": [0, 1]})
+        initial = validator.validate_coherence("question", [self.document("a", "Source.")], "Unrelated.")
+        validator.validate_coherence = Mock(side_effect=[initial, RuntimeError("Embedding unavailable")])
+        self.engine.coherence_validator = validator
+        self.engine._apply_coherence_boost = Mock(return_value=(
+            [self.document("a", "Source."), self.document("b", "More evidence.")], [0.8, 0.7], None,
+        ))
+        self.engine._generate_answer = Mock(side_effect=["Unrelated.", "Improved answer."])
+        result = self.engine.query("question")
+        self.assertEqual(result.answer, "Improved answer.")
+        self.assertEqual(result.metadata["coherence_validation_status"], "unavailable")
+        self.assertIsNone(result.coherence_metrics)
+        self.assertIsNone(result.fallback_action)
 
 User = get_user_model()
+
+
+class AnswerGenerationFailureTest(TestCase):
+    """Keep upstream API failures out of answers and conversation history."""
+
+    def setUp(self) -> None:
+        """Build a real query pipeline with only retrieval and OpenAI mocked."""
+        self.user = User.objects.create_user(username="generation-test")
+        self.client.force_login(self.user)
+        self.index = DocumentIndex.objects.create(name="generation-test")
+        self.engine = ConversationalRAG.__new__(ConversationalRAG)
+        self.engine.conversation_history = []
+        self.engine.max_history_length = 10
+        self.engine.enable_coherence_validation = False
+        self.engine.coherence_validator = Mock()
+        self.engine.prompt_template = self.engine._create_prompt_template()
+        self.engine.llm = Mock()
+        self.engine._retrieve_documents = Mock(return_value=(
+            [SourceDocument(page_content="The Laplacian sums second spatial derivatives.")],
+            [0.9],
+        ))
+        self.request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+
+    def quota_error(self, code: str = "credit_balance_exhausted") -> RateLimitError:
+        """Create a provider quota failure without using real credentials."""
+        return RateLimitError(
+            "Provider detail that must not be exposed",
+            response=httpx.Response(429, request=self.request),
+            body={"code": code, "type": "insufficient_quota"},
+        )
+
+    def test_quota_failure_is_not_an_answer_or_history_entry(self) -> None:
+        """Do not score or remember provider errors as generated answers."""
+        self.engine.enable_coherence_validation = True
+        self.engine.llm.invoke.side_effect = self.quota_error()
+        with self.assertRaisesRegex(RuntimeError, "credits"):
+            self.engine.conversational_query("What is a Laplacian?")
+        self.engine.coherence_validator.validate_coherence.assert_not_called()
+        self.assertEqual(self.engine.conversation_history, [])
+        self.engine.llm.invoke.assert_called_once()
+
+    def test_boosted_generation_failure_is_not_swallowed(self) -> None:
+        """Propagate failures during coherence-triggered regeneration too."""
+        self.engine.enable_coherence_validation = True
+        self.engine.coherence_validator.validate_coherence.return_value = (
+            SimpleNamespace(
+                needs_fallback=True, coherence_level=SimpleNamespace(value="low"),
+            ),
+            SimpleNamespace(boost_k=True, new_k_value=10),
+        )
+        self.engine.llm.invoke.side_effect = [
+            SimpleNamespace(content="The Laplacian sums second derivatives."),
+            self.quota_error(),
+        ]
+        documents = [
+            SourceDocument(page_content="The Laplacian sums second derivatives."),
+            SourceDocument(page_content="It is a differential operator."),
+        ]
+        with patch.object(self.engine, "_apply_coherence_boost",
+                          return_value=(documents, [0.9, 0.8], None)):
+            with self.assertRaisesRegex(RuntimeError, "credits"):
+                self.engine.conversational_query("What is a Laplacian?")
+        self.assertEqual(self.engine.conversation_history, [])
+        self.assertEqual(self.engine.llm.invoke.call_count, 2)
+
+    def test_generation_failure_categories(self) -> None:
+        """Distinguish quota, transient rate limits, credentials, and timeouts."""
+        cases = [
+            (self.quota_error("insufficient_quota"), "credits"),
+            (RateLimitError("private", response=httpx.Response(429, request=self.request),
+                            body={"code": "rate_limit_exceeded"}), "rate limit"),
+            (AuthenticationError("private", response=httpx.Response(401, request=self.request),
+                                 body=None), "API key"),
+            (APITimeoutError(request=self.request), "timed out"),
+        ]
+        for error, message in cases:
+            with self.subTest(error=type(error).__name__, message=message):
+                self.engine.llm.invoke.side_effect = error
+                with self.assertRaisesRegex(RuntimeError, message):
+                    self.engine._generate_answer("Laplacian definition", "What is a Laplacian?")
+
+    def test_query_endpoints_report_quota_and_recover(self) -> None:
+        """Both endpoints return actionable errors and accept subsequent queries."""
+        for endpoint, getter in [
+            ("/api/query/", "get_rag_engine"),
+            ("/api/conversational-query/", "get_conversational_rag"),
+        ]:
+            with self.subTest(endpoint=endpoint), patch(
+                f"rag_app.views.{getter}", return_value=self.engine
+            ):
+                for code in ("credit_balance_exhausted", "insufficient_quota"):
+                    self.engine.llm.invoke.side_effect = self.quota_error(code)
+                    response = self.client.post(endpoint, {
+                        "question": "What is a Laplacian?",
+                        "index_name": self.index.name,
+                    }, content_type="application/json")
+                    self.assertEqual(response.status_code, 503)
+                    self.assertEqual(response.json()["error_code"], "openai_quota_exceeded")
+                    self.assertIn("credits", response.json()["error"])
+                    self.assertNotIn("Provider detail", response.json()["error"])
+                    self.assertNotIn("answer", response.json())
+                self.assertEqual(Query.objects.count(), 0)
+                self.engine.llm.invoke.side_effect = None
+                self.engine.llm.invoke.return_value = SimpleNamespace(
+                    content="The Laplacian sums second spatial derivatives."
+                )
+                response = self.client.post(endpoint, {
+                    "question": "What is a Laplacian?",
+                    "index_name": self.index.name,
+                }, content_type="application/json")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("second spatial derivatives", response.json()["answer"])
+                Query.objects.all().delete()
+
+    def test_conversational_options_sources_and_diagnostics(self) -> None:
+        """Conversational mode honors the same retrieval settings and source UI."""
+        self.engine.llm.invoke.return_value = SimpleNamespace(content="The Laplacian sums derivatives.")
+        for include in (True, False):
+            with self.subTest(include=include), patch(
+                "rag_app.views.get_conversational_rag", return_value=self.engine,
+            ):
+                response = self.client.post("/api/conversational-query/", {
+                    "question": "What is a Laplacian?", "index_name": self.index.name,
+                    "k": 3, "include_sources": include, "include_scores": include,
+                }, content_type="application/json")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual("source_documents" in response.json(), include)
+                self.assertEqual("confidence_scores" in response.json(), include)
+                self.engine._retrieve_documents.assert_called_with(
+                    self.engine._retrieve_documents.call_args.args[0], 3, include,
+                )
+                self.assertEqual(response.json()["metadata"]["coherence_validation_status"], "disabled")
+                record = Query.objects.latest("created_at")
+                self.assertEqual(record.k_results, 3)
+                self.assertEqual(record.include_sources, include)
+                self.assertEqual(record.include_scores, include)
+
+    def test_conversational_rejects_invalid_retrieval_size(self) -> None:
+        """Invalid conversational retrieval settings must not reach the engine."""
+        for k in (0, 21, "bad"):
+            with self.subTest(k=k), patch("rag_app.views.get_conversational_rag") as getter:
+                response = self.client.post("/api/conversational-query/", {
+                    "question": "Summarize all documents", "index_name": self.index.name, "k": k,
+                }, content_type="application/json")
+                self.assertEqual(response.status_code, 400)
+                getter.assert_not_called()
+
 
 class DocumentIndexModelTest(TestCase):
     '''
@@ -685,6 +1054,8 @@ class AuthenticatedConversationTest(TestCase):
         get_engine.return_value.conversational_query.return_value = SimpleNamespace(
             answer='An answer',
             metadata={},
+            source_documents=[],
+            confidence_scores=[],
         )
 
         response = self.client.post(
@@ -712,6 +1083,8 @@ class AuthenticatedConversationTest(TestCase):
         get_engine.return_value.conversational_query.return_value = SimpleNamespace(
             answer='An answer',
             metadata={},
+            source_documents=[],
+            confidence_scores=[],
         )
 
         response = self.client.post(
@@ -740,6 +1113,8 @@ class AnonymousConversationTest(TestCase):
         get_engine.return_value.conversational_query.return_value = SimpleNamespace(
             answer='An answer',
             metadata={},
+            source_documents=[],
+            confidence_scores=[],
         )
 
         with patch.object(
