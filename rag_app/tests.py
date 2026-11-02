@@ -20,7 +20,7 @@ from langchain_core.documents import Document as SourceDocument
 from openai import APITimeoutError, AuthenticationError, RateLimitError
 
 from rag_app.models import Document, DocumentIndex, Query, QuerySession
-from src.rag_engine import ConversationalRAG, QueryResult, RAGEngine
+from src.rag_engine import AnswerGenerationError, ConversationalRAG, QueryResult, RAGEngine
 from src.semantic_coherence import CoherenceLevel, SemanticCoherenceValidator
 from src.vector_store import FAISSVectorStore
 
@@ -71,15 +71,56 @@ class RetrievalAndCoherenceTest(SimpleTestCase):
         for question in (
             "What is a Laplacian?", "Summarize bilateral filtering",
             "What does this document say about edges?",
+            "Summarize bilateral filtering in my notes",
+            "What is a summary statistic in these notes?",
+            "Give an overview of bilateral filtering in all documents",
+            "Summarize all documents about bilateral filtering",
+            "Previous conversation context: Summarize all documents\nCurrent question: Define an edge",
         ):
             with self.subTest(question=question):
                 self.assertFalse(self.engine._is_overview_question(question))
         for question in (
             "Summarize all documents", "Give an overview of my notes",
             "What are the main topics covered in the documents?",
+            "Please summarize my uploaded documents",
+            "Previous conversation context: Define an edge\nCurrent question: Summarize all documents",
         ):
             with self.subTest(question=question):
                 self.assertTrue(self.engine._is_overview_question(question))
+
+    def test_scoped_summaries_keep_focused_retrieval_pool(self) -> None:
+        """Topic-scoped summaries must not scan and balance the full corpus."""
+        self.engine.document_index.search_with_scores.return_value = []
+        self.engine._retrieve_documents("Summarize bilateral filtering in my notes", 5, True)
+        self.engine.document_index.search_with_scores.assert_called_once_with(
+            "Summarize bilateral filtering in my notes", 15,
+        )
+
+    def test_optional_boost_failure_keeps_answer_and_diagnostics(self) -> None:
+        """Search failures after successful generation must not fail the query."""
+        question, source, answer = "Explain cameras", "Cameras project points.", "Unrelated answer."
+        self.engine.coherence_validator = self.validator({
+            question: [1, 0], source: [1, 0], answer: [0, 1],
+        })
+        docs = [self.document("camera", source)]
+        self.engine._generate_answer = Mock(return_value=answer)
+        failures = [
+            RuntimeError("Search unavailable"), ValueError("Invalid search"),
+            OSError("Index unavailable"),
+            APITimeoutError(request=httpx.Request("POST", "https://api.openai.com/v1/embeddings")),
+        ]
+        for error in failures:
+            with self.subTest(error=type(error).__name__):
+                self.engine._retrieve_documents = Mock(side_effect=[(docs, [0.8]), error])
+                with patch("src.rag_engine.logger") as log:
+                    result = self.engine.query(question, k=1)
+                self.assertEqual(result.answer, answer)
+                self.assertEqual(result.source_documents, docs)
+                self.assertEqual(result.confidence_scores, [0.8])
+                self.assertEqual(result.metadata["coherence_level"], "critical")
+                self.assertEqual(result.metadata["coherence_validation_status"], "complete")
+                self.assertTrue(result.fallback_action.flag_uncertainty)
+                log.exception.assert_called_once()
 
     def test_overview_supports_backends_without_scores(self) -> None:
         """Source balancing also works when only regular search is available."""
@@ -271,6 +312,37 @@ class AnswerGenerationFailureTest(TestCase):
             response=httpx.Response(429, request=self.request),
             body={"code": code, "type": "insufficient_quota"},
         )
+
+    def test_endpoints_allowlist_error_messages_and_codes(self) -> None:
+        """Never return arbitrary exception text or unknown codes to clients."""
+        cases = [
+            ("openai_quota_exceeded", "credits"),
+            ("openai_authentication_failed", "API key"),
+            ("openai_timeout", "timed out"),
+            ("openai_rate_limited", "rate limit"),
+            ("openai_generation_failed", "configuration"),
+            ("private-provider-detail", "configuration"),
+        ]
+        for endpoint, getter, method in [
+            ("/api/query/", "get_rag_engine", "query"),
+            ("/api/conversational-query/", "get_conversational_rag", "conversational_query"),
+        ]:
+            for code, expected in cases:
+                with self.subTest(endpoint=endpoint, code=code), patch(
+                    f"rag_app.views.{getter}",
+                ) as get_engine:
+                    getattr(get_engine.return_value, method).side_effect = AnswerGenerationError(
+                        "private exception with traceback and credentials", code,
+                    )
+                    response = self.client.post(endpoint, {
+                        "question": "What is a Laplacian?", "index_name": self.index.name,
+                    }, content_type="application/json")
+                    self.assertEqual(response.status_code, 503)
+                    self.assertIn(expected, response.json()["error"])
+                    self.assertNotIn("private", response.content.decode())
+                    self.assertEqual(response.json()["error_code"],
+                                     code if code != "private-provider-detail" else "openai_generation_failed")
+        self.assertEqual(Query.objects.count(), 0)
 
     def test_quota_failure_is_not_an_answer_or_history_entry(self) -> None:
         """Do not score or remember provider errors as generated answers."""

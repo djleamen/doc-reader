@@ -70,6 +70,9 @@ overview/introductory passages, and select sources in balanced rounds. When `k`
 is smaller than the number of files, only `k` files can be represented. Focused
 definition queries retain relevance-first retrieval. Corpus overviews scan all
 indexed candidates, so they cost more than focused lookups on large indexes.
+Topic-scoped summaries such as "Summarize bilateral filtering in my notes" also
+use focused retrieval. If an optional retrieval boost fails, the original answer,
+sources, and diagnostics are retained and the boost failure is logged.
 
 ## Architecture
 
@@ -176,6 +179,8 @@ the app. Existing documents and indexes do not need to be uploaded again.
 Generation failures return HTTP 503 with an actionable `error` and an
 `error_code`, rather than being saved or scored as low-confidence answers.
 For example, exhausted credits return `openai_quota_exceeded`.
+Public error messages and codes are allowlisted; exception text is not returned
+by either classic query endpoint.
 
 ### API
 

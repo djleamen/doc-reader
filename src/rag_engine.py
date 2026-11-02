@@ -22,6 +22,21 @@ from src.document_processor import DocumentProcessor
 from src.semantic_coherence import SemanticCoherenceValidator, CoherenceMetrics, FallbackAction
 
 
+ANSWER_GENERATION_MESSAGES = {
+    "openai_quota_exceeded": (
+        "OpenAI API credits or quota are exhausted. Check billing and usage "
+        "limits for the project associated with OPENAI_API_KEY, then retry. "
+        "Your documents do not need to be uploaded again."
+    ),
+    "openai_authentication_failed": "OpenAI rejected the API key. Check OPENAI_API_KEY and restart the app.",
+    "openai_timeout": "OpenAI answer generation timed out. Please retry.",
+    "openai_rate_limited": "OpenAI's request rate limit was reached. Wait briefly, then retry.",
+    "openai_generation_failed": (
+        "OpenAI answer generation failed. Check the server logs and model configuration, then retry."
+    ),
+}
+
+
 class AnswerGenerationError(RuntimeError):
     """Expose a safe, actionable generation failure to callers."""
 
@@ -164,12 +179,18 @@ Answer:'''
         """Identify explicit corpus-wide summaries without changing topic lookups."""
         current_question = question.rsplit("Current question:", 1)[-1]
         normalized = self._normalize_text(current_question)
-        corpus = re.search(r'\b(documents|files|notes|uploads|corpus)\b', normalized)
-        overview = re.search(
-            r'\b(summarize|summarise|summary|overview)\b|\b(main|key|major) topics\b',
-            normalized,
+        collection = (
+            r'(?:(?:all|the|my|these|our|your|uploaded|provided|available)\s+)*'
+            r'(?:documents|files|notes|uploads|corpus)'
         )
-        return bool(corpus and overview)
+        return bool(re.fullmatch(
+            rf'(?:please )?(?:'
+            rf'(?:summarize|summarise) {collection}|'
+            rf'(?:(?:give|provide|show)(?: me)? )?(?:a |an )?(?:summary|overview) of {collection}|'
+            rf'what are the (?:main|key|major) topics(?: covered)?(?: in| across| by) {collection}'
+            rf')(?: please)?',
+            normalized,
+        ))
 
     def _retrieve_documents(self, question: str, k: int, include_scores: bool):
         '''
@@ -226,25 +247,16 @@ Answer:'''
                 type(error).__name__, getattr(error, "status_code", None), code,
             )
             if code in {"insufficient_quota", "credit_balance_exhausted"} or error_type == "insufficient_quota":
-                message = (
-                    "OpenAI API credits or quota are exhausted. Check billing and usage "
-                    "limits for the project associated with OPENAI_API_KEY, then retry. "
-                    "Your documents do not need to be uploaded again."
-                )
                 public_code = "openai_quota_exceeded"
             elif isinstance(error, AuthenticationError):
-                message = "OpenAI rejected the API key. Check OPENAI_API_KEY and restart the app."
                 public_code = "openai_authentication_failed"
             elif isinstance(error, APITimeoutError):
-                message = "OpenAI answer generation timed out. Please retry."
                 public_code = "openai_timeout"
             elif isinstance(error, RateLimitError):
-                message = "OpenAI's request rate limit was reached. Wait briefly, then retry."
                 public_code = "openai_rate_limited"
             else:
-                message = "OpenAI answer generation failed. Check the server logs and model configuration, then retry."
                 public_code = "openai_generation_failed"
-            raise AnswerGenerationError(message, public_code) from error
+            raise AnswerGenerationError(ANSWER_GENERATION_MESSAGES[public_code], public_code) from error
 
     def _apply_coherence_boost(self, question: str, fallback_action, original_k: int,
                                include_scores: bool):
@@ -266,9 +278,13 @@ Answer:'''
         logger.info(
             f"Boosting k from {original_k} to {fallback_action.new_k_value}")
 
-        boosted_source_documents, boosted_confidence_scores = self._retrieve_documents(
-            question, fallback_action.new_k_value, include_scores,
-        )
+        try:
+            boosted_source_documents, boosted_confidence_scores = self._retrieve_documents(
+                question, fallback_action.new_k_value, include_scores,
+            )
+        except (OpenAIError, RuntimeError, ValueError, OSError):
+            logger.exception("Coherence retrieval boost unavailable; keeping the original answer")
+            return None, None, None
 
         return boosted_source_documents, boosted_confidence_scores, None
 

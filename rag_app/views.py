@@ -24,7 +24,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from src.rag_engine import AnswerGenerationError, ConversationalRAG, RAGEngine
+from src.rag_engine import ANSWER_GENERATION_MESSAGES, AnswerGenerationError, ConversationalRAG, RAGEngine
 from src.vector_store import INDEX_NAME_PATTERN, INDEX_NAME_RULE
 from src.config import settings as rag_settings
 
@@ -50,6 +50,17 @@ _MAX_CONVERSATIONAL_RAGS = 128
 logger = logging.getLogger(__name__)
 
 FILE_PROCESSING_ERROR_MESSAGE = 'An internal error occurred while processing this file.'
+
+
+def _answer_generation_error_response(error_code: str) -> Response:
+    """Return only allowlisted public messages and codes, never exception text."""
+    code = error_code if error_code in ANSWER_GENERATION_MESSAGES else 'openai_generation_failed'
+    logger.warning("Answer generation unavailable: %s", code)
+    return Response({
+        'error': ANSWER_GENERATION_MESSAGES[code],
+        'error_code': code,
+    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
 
 # Length bounds for the raw-JSON query path. The serializer-backed Azure views
 # cap these via CharField (question<=5000, index_name<=255); the classic views
@@ -471,11 +482,7 @@ class QueryView(APIView):
                 return Response(response_data)
 
             except AnswerGenerationError as e:
-                logger.warning("Answer generation unavailable: %s", e.code)
-                return Response({
-                    'error': str(e),
-                    'error_code': e.code,
-                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                return _answer_generation_error_response(e.code)
             except (OSError, ValueError, RuntimeError) as e:
                 logger.error("Query execution failed: %s", e, exc_info=True)
                 return Response({
@@ -578,11 +585,7 @@ class ConversationalQueryView(APIView):
                 return Response(response_data)
 
             except AnswerGenerationError as e:
-                logger.warning("Conversational answer generation unavailable: %s", e.code)
-                return Response({
-                    'error': str(e),
-                    'error_code': e.code,
-                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                return _answer_generation_error_response(e.code)
             except (OSError, ValueError, RuntimeError):
                 logger.error("Conversational query failed", exc_info=True)
                 return Response({
