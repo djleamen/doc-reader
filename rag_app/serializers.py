@@ -76,7 +76,7 @@ class QueryResponseSerializer(serializers.Serializer):
     Serializer for query responses.
     
     Serializes RAG query results including answer, source documents,
-    confidence scores, and metadata.
+    retrieval relevance scores (legacy ``confidence_scores`` field), and metadata.
     '''
     query = serializers.CharField()
     answer = serializers.CharField()

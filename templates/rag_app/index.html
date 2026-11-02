@@ -93,7 +93,7 @@
                     <div class="form-check mb-2">
                         <input class="form-check-input" type="checkbox" id="includeScores" checked>
                         <label class="form-check-label text-white" for="includeScores">
-                            Include Confidence Scores
+                            Include Retrieval Scores
                         </label>
                     </div>
                     
@@ -244,6 +244,10 @@
             </div>
         </div>
         
+        <div id="queryError" class="glass-card hidden" role="alert">
+            <div class="alert alert-error mb-0"></div>
+        </div>
+
         <!-- Results Section -->
         <div id="resultsSection" class="hidden">
             
@@ -254,6 +258,7 @@
                 </div>
                 <p class="panel-caption">Generated from the retrieved chunks below. If retrieval is weak, the answer quality will be too.</p>
                 <div id="answerContent" class="text-white"></div>
+                <div id="supportDiagnostics" class="text-white-50 mt-3 hidden"></div>
             </div>
             
             <!-- Query Details -->
@@ -350,6 +355,7 @@ function displayUploadResults(response, type) {
 }
 
 function displayQueryResults(response) {
+    $('#queryError').hide();
     // Answer
     $('#answerContent').html(response.answer.replaceAll('\n', '<br>'));
     
@@ -384,13 +390,25 @@ function displayQueryResults(response) {
         `;
     }
     $('#queryMetrics').html(metrics);
+    const metadata = response.metadata || {};
+    let diagnostic = '';
+    if (Number.isFinite(metadata.answer_support_cosine)) {
+        diagnostic = `Answer/source similarity: ${metadata.answer_support_cosine.toFixed(3)}. ` +
+            `${metadata.retrieved_source_count || 0} source files represented. ` +
+            'This is a text-similarity heuristic, not factual confidence.';
+        if (metadata.semantic_support_warning) {
+            diagnostic += ' ' + metadata.semantic_support_warning;
+        }
+    } else if (metadata.coherence_validation_status === 'unavailable') {
+        diagnostic = 'Semantic support checking is unavailable. No confidence assessment was made; review the sources.';
+    }
+    $('#supportDiagnostics').text(diagnostic).toggle(diagnostic !== '');
     
     // Source documents
     if (response.source_documents && response.source_documents.length > 0) {
         let sourcesHtml = '';
         for (const [index, doc] of response.source_documents.entries()) {
-            let score = response.confidence_scores ? 
-                       response.confidence_scores[index] : null;
+            const score = response.confidence_scores?.[index];
             
             sourcesHtml += `
                 <div class="accordion-item mb-3 source-accordion-item">
@@ -399,10 +417,10 @@ function displayQueryResults(response) {
                                 data-bs-toggle="collapse" data-bs-target="#source${index}">
                             <i class="fas fa-file-alt"></i> 
                             Chunk ${index + 1} - ${doc.metadata.filename || 'Unknown'}
-                            ${score === null ? '' : `<span class="confidence-score float-end">Score: ${score.toFixed(4)}</span>`}
+                            ${Number.isFinite(score) ? `<span class="confidence-score float-end">Retrieval: ${score.toFixed(4)}</span>` : ''}
                         </button>
                     </h6>
-                    <div id="source${index}" class="collapse">
+                    <div id="source${index}" class="collapse${index === 0 ? ' show' : ''}">
                         <div class="source-doc">
                             <div class="mb-3">${doc.content.replaceAll('\n', '<br>')}</div>
                             ${Object.keys(doc.metadata).length > 0 ? 
@@ -428,13 +446,9 @@ function displayQueryResults(response) {
 }
 
 function displayQueryError(error) {
-    $('#resultsSection').html(`
-        <div class="glass-card">
-            <div class="alert alert-error">
-                <i class="fas fa-exclamation-triangle"></i> ${error}
-            </div>
-        </div>
-    `).show();
+    $('#resultsSection').hide();
+    $('#queryError .alert').text(error);
+    $('#queryError').show();
 }
 
 function updatePipelineBadge() {
@@ -734,6 +748,7 @@ $(document).ready(function() {
         $('#queryProgress').show();
         $('#askBtn').prop('disabled', true);
         $('#resultsSection').hide();
+        $('#queryError').hide();
         
         $.ajax({
             url: endpoint,

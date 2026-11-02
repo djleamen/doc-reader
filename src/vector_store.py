@@ -79,6 +79,12 @@ class VectorStoreManager(ABC):
     document storage, retrieval, and persistence.
     '''
 
+    @property
+    @abstractmethod
+    def document_count(self) -> int:
+        """Return the number of indexed chunks, including loaded indexes."""
+        raise NotImplementedError
+
     @abstractmethod
     def add_documents(self, documents: List[Document]) -> None:
         '''
@@ -144,6 +150,11 @@ class FAISSVectorStore(VectorStoreManager):
 
         self.vector_store: Optional[FAISS] = None
         self.documents: List[Document] = []
+
+    @property
+    def document_count(self) -> int:
+        """Read the count from FAISS rather than the ingestion-only cache."""
+        return int(self.vector_store.index.ntotal) if self.vector_store is not None else 0
 
     def add_documents(self, documents: List[Document]) -> None:
         '''
@@ -294,6 +305,11 @@ class ChromaVectorStore(VectorStoreManager):
         except ImportError as exc:
             raise ImportError(
                 "ChromaDB not installed. Install with: pip install chromadb") from exc
+
+    @property
+    def document_count(self) -> int:
+        """Return the persisted Chroma collection's chunk count."""
+        return self.vector_store._collection.count() if self.vector_store is not None else 0
 
     def add_documents(self, documents: List[Document]) -> None:
         '''

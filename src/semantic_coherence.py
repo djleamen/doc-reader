@@ -2,13 +2,14 @@
 Semantic coherence validation for RAG pipeline.
 
 Tracks coherence across query→chunk, chunk→generation, and query→generation
-embeddings to identify and mitigate information loss during retrieval and generation.
+embeddings for retrieval diagnostics and sentence-to-passage semantic support.
+These heuristic similarities are not calibrated factual-confidence estimates.
 
 Written by DJ Leamen (2025-2026)
 """
 
 import os
-import random
+import re
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
@@ -17,6 +18,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from loguru import logger
+from openai import OpenAIError
 
 from src.config import settings
 from src.vector_store import LocalEmbeddings
@@ -28,7 +30,7 @@ def cosine_similarity_numpy(a: np.ndarray, b: np.ndarray) -> float:
     
     :param a: First vector
     :param b: Second vector
-    :return: Cosine similarity score (0 to 1)
+    :return: Cosine similarity score (-1 to 1)
     '''
     # Flatten arrays to ensure they're 1D
     a_flat = a.flatten()
@@ -81,6 +83,7 @@ class CoherenceMetrics:
     avg_chunk_similarity: float
     min_chunk_similarity: float
     max_chunk_similarity: float
+    answer_support_cosine: float = 0.0
 
 
 @dataclass
@@ -88,8 +91,8 @@ class FallbackAction:
     '''
     Defines fallback actions when coherence drops.
     
-    Specifies remediation strategies including k-boosting,
-    hedging, and uncertainty flagging.
+    Specifies retrieval boosting and diagnostic warnings. The legacy
+    hedge_output field is retained for compatibility; answers are not rewritten.
     '''
     boost_k: bool = False
     hedge_output: bool = False
@@ -122,14 +125,7 @@ class SemanticCoherenceValidator:
             passes its vector store's embeddings so a second copy of the local
             model isn't loaded per cached engine.
         '''
-        # Reuse the provided embedding backend when available; the RAG engine
-        # passes its vector store's embeddings so we don't load a second copy
-        # of the local sentence-transformer model per cached engine. Otherwise
-        # mirror the vector store's own selection so coherence validation still
-        # works in local-embeddings mode -- building OpenAIEmbeddings here with
-        # no key would fail every embed_query, fall back to zero vectors, and
-        # flag every answer as CRITICAL. The shared request timeout applies to
-        # OpenAI calls either way.
+        # Share the retriever's backend and avoid loading another local model.
         if embeddings is not None:
             self.embeddings = embeddings
         else:
@@ -142,8 +138,6 @@ class SemanticCoherenceValidator:
                     model=settings.embedding_model,
                     timeout=settings.request_timeout
                 )
-        self.embedding_dim = self._infer_embedding_dim(self.embeddings)
-
         # Default coherence thresholds from config
         self.thresholds = coherence_thresholds or {
             "high_threshold": settings.coherence_high_threshold,
@@ -156,8 +150,6 @@ class SemanticCoherenceValidator:
         self.fallback_config = fallback_config or {
             "boost_k_on_low": True,
             "boost_k_multiplier": settings.boost_k_multiplier,
-            "hedge_on_medium": True,
-            "flag_uncertainty_on_critical": True,
             "max_k_boost": settings.max_k_boost
         }
 
@@ -178,6 +170,8 @@ class SemanticCoherenceValidator:
         :return: Tuple of (CoherenceMetrics, FallbackAction)
         '''
         logger.debug(f"Validating coherence for query: {query[:50]}...")
+        if not query.strip() or not generated_answer.strip() or not retrieved_chunks:
+            raise ValueError("Semantic support requires a question, answer, and source chunks")
 
         # Get embeddings
         query_embedding = self._get_embedding(query)
@@ -200,7 +194,8 @@ class SemanticCoherenceValidator:
             query_chunk_similarities,
             chunk_answer_similarities,
             query_answer_similarity,
-            len(retrieved_chunks)
+            len(retrieved_chunks),
+            self._calculate_answer_support(retrieved_chunks, generated_answer),
         )
 
         # Determine fallback actions
@@ -211,22 +206,12 @@ class SemanticCoherenceValidator:
         return metrics, fallback_action
 
     @staticmethod
-    def _infer_embedding_dim(embeddings: Embeddings) -> int:
-        '''
-        Determine an embedding backend's output dimension for zero-vector
-        fallbacks.
-
-        :param embeddings: The active embedding backend
-        :return: Output dimension (sentence-transformers reports its own;
-            defaults to the OpenAI dimension otherwise)
-        '''
-        model = getattr(embeddings, "model", None)
-        get_dim = getattr(model, "get_sentence_embedding_dimension", None)
-        if callable(get_dim):
-            dim = get_dim()
-            if dim:
-                return int(dim)
-        return 1536  # OpenAI embedding dimension
+    def _validated_vector(embedding: List[float]) -> np.ndarray:
+        """Reject failed or invalid embeddings instead of inventing low support."""
+        vector = np.asarray(embedding, dtype=float).reshape(1, -1)
+        if not vector.size or not np.isfinite(vector).all() or np.linalg.norm(vector) == 0:
+            raise ValueError("Semantic support received an invalid embedding")
+        return vector
 
     def _get_embedding(self, text: str) -> np.ndarray:
         '''
@@ -237,11 +222,10 @@ class SemanticCoherenceValidator:
         '''
         try:
             embedding = self.embeddings.embed_query(text)
-            return np.array(embedding).reshape(1, -1)
-        except Exception as e:
-            logger.error(f"Error getting embedding: {e}")
-            # Return zero vector as fallback (matching the active model's dimension)
-            return np.zeros((1, self.embedding_dim))
+            return self._validated_vector(embedding)
+        except (OpenAIError, RuntimeError, ValueError, TypeError, OSError) as e:
+            logger.error("Semantic embedding failed: {}", type(e).__name__)
+            raise RuntimeError("Semantic support embedding unavailable") from e
 
     def _get_chunk_embeddings(self, chunks: List[Document]) -> List[np.ndarray]:
         '''
@@ -250,18 +234,56 @@ class SemanticCoherenceValidator:
         :param chunks: List of document chunks
         :return: List of embedding vectors for each chunk
         '''
-        embeddings = []
+        return self._embed_texts([chunk.page_content for chunk in chunks])
 
-        for chunk in chunks:
-            try:
-                embedding = self.embeddings.embed_query(chunk.page_content)
-                embeddings.append(np.array(embedding).reshape(1, -1))
-            except Exception as e:
-                logger.error(f"Error getting chunk embedding: {e}")
-                # Use zero vector as fallback (matching the active model's dimension)
-                embeddings.append(np.zeros((1, self.embedding_dim)))
+    def _embed_texts(self, texts: List[str]) -> List[np.ndarray]:
+        """Batch and validate diagnostic embeddings, surfacing backend failures."""
+        try:
+            embeddings = self.embeddings.embed_documents(texts)
+            if len(embeddings) != len(texts):
+                raise ValueError("Embedding response length does not match the input")
+            return [self._validated_vector(vector) for vector in embeddings]
+        except (OpenAIError, RuntimeError, ValueError, TypeError, OSError) as e:
+            logger.error("Semantic batch embedding failed: {}", type(e).__name__)
+            raise RuntimeError("Semantic support embedding unavailable") from e
 
-        return embeddings
+    @staticmethod
+    def _text_windows(text: str) -> List[str]:
+        """Keep passages short enough for local models, with overlapping context."""
+        words = text.split()
+        if len(words) <= 60:
+            return [" ".join(words)]
+        return [" ".join(words[start:start + 60]) for start in range(0, len(words), 30)]
+
+    def _statement_windows(self, text: str) -> List[str]:
+        """Use identical sentence boundaries for source and answer comparisons."""
+        normalized = " ".join(text.split())
+        return [
+            window
+            for sentence in re.split(r'(?<=[.!?])\s+', normalized)
+            if sentence.strip()
+            for window in self._text_windows(sentence)
+        ]
+
+    def _calculate_answer_support(self, chunks: List[Document], answer: str) -> float:
+        """Match each answer sentence to its best source passage, not every chunk."""
+        passages = list(dict.fromkeys(
+            passage
+            for chunk in chunks
+            for passage in [
+                " ".join(chunk.page_content.split()),
+                *self._text_windows(chunk.page_content),
+                *self._statement_windows(chunk.page_content),
+            ]
+        ))
+        statements = self._statement_windows(answer)
+        vectors = self._embed_texts(passages + statements)
+        passage_vectors = vectors[:len(passages)]
+        support = [
+            max(self._calculate_similarities(statement, passage_vectors))
+            for statement in vectors[len(passages):]
+        ]
+        return float(np.mean(support))
 
     def _calculate_similarities(
         self,
@@ -273,19 +295,12 @@ class SemanticCoherenceValidator:
         
         :param query_embedding: Query embedding vector
         :param chunk_embeddings: List of chunk embedding vectors
-        :return: List of similarity scores (0-1)
+        :return: List of cosine similarity scores (-1 to 1)
         '''
-        similarities = []
-
-        for chunk_embedding in chunk_embeddings:
-            try:
-                similarity = cosine_similarity_numpy(query_embedding, chunk_embedding)
-                similarities.append(float(similarity))
-            except Exception as e:
-                logger.error(f"Error calculating similarity: {e}")
-                similarities.append(0.0)
-
-        return similarities
+        return [
+            float(cosine_similarity_numpy(query_embedding, chunk_embedding))
+            for chunk_embedding in chunk_embeddings
+        ]
 
     def _calculate_chunk_answer_similarities(
         self,
@@ -297,26 +312,17 @@ class SemanticCoherenceValidator:
         
         :param chunk_embeddings: List of chunk embedding vectors
         :param answer_embedding: Generated answer embedding vector
-        :return: List of similarity scores between chunks and answer (0-1)
+        :return: List of cosine similarity scores between chunks and answer
         '''
-        similarities = []
-
-        for chunk_embedding in chunk_embeddings:
-            try:
-                similarity = cosine_similarity_numpy(chunk_embedding, answer_embedding)
-                similarities.append(float(similarity))
-            except Exception as e:
-                logger.error(f"Error calculating chunk-answer similarity: {e}")
-                similarities.append(0.0)
-
-        return similarities
+        return self._calculate_similarities(answer_embedding, chunk_embeddings)
 
     def _calculate_coherence_metrics(
         self,
         query_chunk_similarities: List[float],
         chunk_answer_similarities: List[float],
         query_answer_similarity: float,
-        num_chunks: int
+        num_chunks: int,
+        answer_support_cosine: float,
     ) -> CoherenceMetrics:
         '''
         Calculate comprehensive coherence metrics.
@@ -325,6 +331,7 @@ class SemanticCoherenceValidator:
         :param chunk_answer_similarities: Similarity scores between chunks and answer
         :param query_answer_similarity: Similarity score between query and answer
         :param num_chunks: Number of retrieved chunks
+        :param answer_support_cosine: Mean best-passage similarity per answer sentence
         :return: CoherenceMetrics object with all calculated metrics
         '''
 
@@ -337,8 +344,8 @@ class SemanticCoherenceValidator:
         chunk_generation_delta = abs(avg_query_chunk - avg_chunk_answer)
         query_generation_delta = abs(avg_query_chunk - query_answer_similarity)
 
-        # Overall coherence delta (maximum gap)
-        coherence_delta = max(query_chunk_delta, chunk_generation_delta, query_generation_delta)
+        # Query similarity is a retrieval diagnostic, not a measure of answer support.
+        coherence_delta = 1.0 - answer_support_cosine
 
         # Determine coherence level
         coherence_level = self._determine_coherence_level(float(coherence_delta))
@@ -359,7 +366,8 @@ class SemanticCoherenceValidator:
             num_chunks=num_chunks,
             avg_chunk_similarity=float(avg_query_chunk),
             min_chunk_similarity=float(min(query_chunk_similarities)) if query_chunk_similarities else 0.0,
-            max_chunk_similarity=float(max(query_chunk_similarities)) if query_chunk_similarities else 0.0
+            max_chunk_similarity=float(max(query_chunk_similarities)) if query_chunk_similarities else 0.0,
+            answer_support_cosine=answer_support_cosine,
         )
 
     def _determine_coherence_level(self, coherence_delta: float) -> CoherenceLevel:
@@ -393,11 +401,10 @@ class SemanticCoherenceValidator:
         if metrics.coherence_level == CoherenceLevel.CRITICAL:
             # Critical coherence - apply all fallbacks
             action.boost_k = self.fallback_config.get("boost_k_on_low", True)
-            action.hedge_output = True
             action.flag_uncertainty = True
             action.uncertainty_message = (
-                "Low confidence in answer due to semantic inconsistency. "
-                "Consider rephrasing your question or providing more context."
+                "Some answer passages have limited similarity to the retrieved sources. "
+                "Review the source chunks. This heuristic does not determine factual correctness."
             )
 
             if action.boost_k:
@@ -407,10 +414,13 @@ class SemanticCoherenceValidator:
                 action.new_k_value = min(int(current_k * multiplier), max_k)
 
         elif metrics.coherence_level == CoherenceLevel.LOW:
-            # Low coherence - boost retrieval and hedge
+            # Low semantic support warrants another retrieval attempt.
             action.boost_k = self.fallback_config.get("boost_k_on_low", True)
-            action.hedge_output = True
-            action.flag_uncertainty = False
+            action.flag_uncertainty = True
+            action.uncertainty_message = (
+                "Some answer passages have limited similarity to the retrieved sources. "
+                "Review the source chunks. This heuristic does not determine factual correctness."
+            )
 
             if action.boost_k:
                 current_k = metrics.num_chunks
@@ -418,52 +428,10 @@ class SemanticCoherenceValidator:
                 multiplier = self.fallback_config.get("boost_k_multiplier", 1.5)
                 action.new_k_value = min(int(current_k * multiplier), max_k)
 
-        elif metrics.coherence_level == CoherenceLevel.MEDIUM:
-            # Medium coherence - light hedging only
-            action.hedge_output = self.fallback_config.get("hedge_on_medium", True)
-
         # High coherence requires no fallbacks
 
         return action
 
     def get_hedged_response(self, original_answer: str, metrics: CoherenceMetrics) -> str:
-        '''
-        Add hedging language to response when coherence is questionable.
-        
-        :param original_answer: Original generated answer text
-        :param metrics: CoherenceMetrics object with validation results
-        :return: Answer with appropriate hedging language based on coherence level
-        '''
-        if metrics.coherence_level == CoherenceLevel.HIGH:
-            return original_answer
-
-        hedging_phrases = {
-            CoherenceLevel.MEDIUM: [
-                "Based on the available information, ",
-                "According to the documents, ",
-                "From what I can determine, "
-            ],
-            CoherenceLevel.LOW: [
-                "Based on limited information in the documents, ",
-                "While the available context suggests ",
-                "From the relevant sections I found, "
-            ],
-            CoherenceLevel.CRITICAL: [
-                "With limited confidence, ",
-                "Based on potentially incomplete information, ",
-                "The available context suggests, though with uncertainty, "
-            ]
-        }
-
-        hedge = random.choice(hedging_phrases.get(metrics.coherence_level, [""]))
-
-        hedged_answer = hedge + original_answer.lstrip()
-
-        # Add uncertainty footer for critical cases
-        if metrics.coherence_level == CoherenceLevel.CRITICAL:
-            hedged_answer += (
-                "\n\n*Note: This answer has low semantic coherence. "
-                "Consider rephrasing your question for better results.*"
-            )
-
-        return hedged_answer
+        """Preserve answers; similarity diagnostics no longer rewrite their certainty."""
+        return original_answer
