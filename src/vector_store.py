@@ -423,17 +423,18 @@ class DocumentIndex:
         self.index_name = index_name
         self.vector_store = VectorStoreFactory.create_vector_store()
 
-        # Construct and validate index path using canonical paths.
-        base_dir = Path(settings.index_dir).resolve()
-        candidate_path = (base_dir / index_name).resolve()
-        try:
-            candidate_path.relative_to(base_dir)
-        except ValueError as exc:
+        # Construct and validate index path using canonical paths. The index
+        # must live strictly inside the base directory: a name that resolves
+        # to the base directory itself (e.g. via a symlink) would let
+        # clear_index() delete every index.
+        base_dir = os.path.realpath(settings.index_dir)
+        candidate_path = os.path.realpath(os.path.join(base_dir, index_name))
+        if not candidate_path.startswith(base_dir + os.sep):
             raise ValueError(
                 f"Invalid index name: {index_name!r} leads to unsafe path: {candidate_path}"
-            ) from exc
+            )
 
-        self.index_path = candidate_path
+        self.index_path = Path(candidate_path)
 
         # Try to load existing index
         if self.index_path.exists():
