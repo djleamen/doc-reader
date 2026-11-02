@@ -417,22 +417,23 @@ class DocumentIndex:
         :param index_name: Name of the index (alphanumeric, dashes, underscores only)
         :raises ValueError: If index name is invalid or leads to unsafe path
         '''
-        from os.path import normpath, realpath
-
         if not INDEX_NAME_PATTERN.fullmatch(index_name):
             raise ValueError(f"Invalid index name: {index_name!r}. {INDEX_NAME_RULE}")
 
         self.index_name = index_name
         self.vector_store = VectorStoreFactory.create_vector_store()
 
-        # Construct and validate index path
-        normalized_index_name = normpath(index_name)
-        self.index_path = Path(
-            realpath(Path(settings.index_dir) / normalized_index_name))
-
-        if not str(self.index_path).startswith(str(realpath(settings.index_dir))):
+        # Construct and validate index path using canonical paths.
+        base_dir = Path(settings.index_dir).resolve()
+        candidate_path = (base_dir / index_name).resolve()
+        try:
+            candidate_path.relative_to(base_dir)
+        except ValueError as exc:
             raise ValueError(
-                f"Invalid index name: {index_name} leads to unsafe path: {self.index_path}")
+                f"Invalid index name: {index_name!r} leads to unsafe path: {candidate_path}"
+            ) from exc
+
+        self.index_path = candidate_path
 
         # Try to load existing index
         if self.index_path.exists():
